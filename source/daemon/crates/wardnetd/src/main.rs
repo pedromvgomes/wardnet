@@ -8,12 +8,19 @@ use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
 use wardnetd::config::{Config, LogFormat};
+use wardnetd::event::{BroadcastEventBus, EventPublisher};
+use wardnetd::keys::FileKeyStore;
 use wardnetd::repository::{
     SqliteAdminRepository, SqliteApiKeyRepository, SqliteDeviceRepository, SqliteSessionRepository,
-    SqliteSystemConfigRepository,
+    SqliteSystemConfigRepository, SqliteTunnelRepository,
 };
-use wardnetd::service::{AuthServiceImpl, DeviceServiceImpl, SystemServiceImpl};
+use wardnetd::service::{AuthServiceImpl, DeviceServiceImpl, SystemServiceImpl, TunnelServiceImpl};
 use wardnetd::state::AppState;
+use wardnetd::tunnel_idle::IdleTunnelWatcher;
+use wardnetd::tunnel_monitor::TunnelMonitor;
+use wardnetd::wireguard::WireGuardOps;
+use wardnetd::wireguard_noop::NoopWireGuard;
+use wardnetd::wireguard_real::RealWireGuard;
 use wardnetd::{api, db};
 
 /// Wardnet daemon — self-hosted network privacy gateway.
@@ -31,6 +38,10 @@ struct Cli {
     /// Run in foreground mode (default). Use with systemd or as a regular process.
     #[arg(long)]
     foreground: bool,
+
+    /// Use a no-op `WireGuard` backend instead of real kernel interfaces.
+    #[arg(long)]
+    mock_network: bool,
 }
 
 #[tokio::main]
@@ -49,7 +60,22 @@ async fn main() -> anyhow::Result<()> {
     let session_repo = Arc::new(SqliteSessionRepository::new(pool.clone()));
     let api_key_repo = Arc::new(SqliteApiKeyRepository::new(pool.clone()));
     let device_repo = Arc::new(SqliteDeviceRepository::new(pool.clone()));
-    let system_config_repo = Arc::new(SqliteSystemConfigRepository::new(pool));
+    let system_config_repo = Arc::new(SqliteSystemConfigRepository::new(pool.clone()));
+    let tunnel_repo = Arc::new(SqliteTunnelRepository::new(pool));
+
+    // Create event publisher.
+    let event_publisher: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(256));
+
+    // Select WireGuard backend.
+    let wireguard: Arc<dyn WireGuardOps> = if cli.mock_network {
+        tracing::info!("using no-op WireGuard backend (--mock-network)");
+        Arc::new(NoopWireGuard)
+    } else {
+        Arc::new(RealWireGuard)
+    };
+
+    // Create key store.
+    let key_store = Arc::new(FileKeyStore::new(config.tunnel.keys_dir.clone()));
 
     // Create service instances, injecting repository traits.
     let auth_service = Arc::new(AuthServiceImpl::new(
@@ -60,8 +86,42 @@ async fn main() -> anyhow::Result<()> {
     ));
     let device_service = Arc::new(DeviceServiceImpl::new(device_repo));
     let system_service = Arc::new(SystemServiceImpl::new(system_config_repo, started_at));
+    let tunnel_service: Arc<dyn wardnetd::service::TunnelService> =
+        Arc::new(TunnelServiceImpl::new(
+            tunnel_repo.clone(),
+            wireguard.clone(),
+            key_store,
+            event_publisher.clone(),
+        ));
 
-    let state = AppState::new(auth_service, device_service, system_service, config.clone());
+    // Restore tunnel configurations from the database.
+    tunnel_service
+        .restore_tunnels()
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    // Start background monitors.
+    let monitor = TunnelMonitor::start(
+        tunnel_repo,
+        wireguard,
+        event_publisher.clone(),
+        config.tunnel.stats_interval_secs,
+        config.tunnel.health_check_interval_secs,
+    );
+    let idle_watcher = IdleTunnelWatcher::start(
+        event_publisher.clone(),
+        tunnel_service.clone(),
+        config.tunnel.idle_timeout_secs,
+    );
+
+    let state = AppState::new(
+        auth_service,
+        device_service,
+        system_service,
+        tunnel_service,
+        event_publisher,
+        config.clone(),
+    );
 
     let app = api::router(state);
 
@@ -83,7 +143,10 @@ async fn main() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    tracing::info!("server stopped");
+    tracing::info!("server stopped, shutting down background tasks");
+    monitor.shutdown().await;
+    idle_watcher.shutdown().await;
+
     Ok(())
 }
 

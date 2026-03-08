@@ -49,9 +49,9 @@ Internet
     │
     ├─── [Pi Box: Wardnet]  ← new device on LAN, static IP
     │         │
-    │         ├── wg0 → VPN Provider, US Exit
-    │         ├── wg1 → VPN Provider, UK Exit
-    │         ├── wg2 → VPN Provider, DE Exit
+    │         ├── wg_ward0 → VPN Provider, US Exit
+    │         ├── wg_ward1 → VPN Provider, UK Exit
+    │         ├── wg_ward2 → VPN Provider, DE Exit
     │         └── eth0 → LAN (acts as policy-routing gateway)
     │
     ├─── Smart TV  ──────────► default gateway = Pi (routes via UK)
@@ -72,7 +72,7 @@ The heart of the system. Runs as a background service, owns all WireGuard interf
 
 #### 3.1.1 WireGuard Tunnel Management
 
-- **FR-001** Maintain multiple simultaneous outbound WireGuard tunnels (one per country/provider endpoint), each on its own network interface (wg0, wg1, …)
+- **FR-001** Maintain multiple simultaneous outbound WireGuard tunnels (one per country/provider endpoint), each on its own network interface (wg_ward0, wg_ward1, …)
 - **FR-002** Support importing WireGuard configuration files (.conf) directly — "bring your own provider"
 - **FR-003** Support a curated provider registry with guided setup shortcuts (Mullvad, NordVPN, ProtonVPN, IVPN as initial set)
 - **FR-004** Automatically reconnect tunnels on failure with configurable retry backoff
@@ -140,22 +140,22 @@ A local REST + WebSocket API served by the daemon (or a sidecar process), consum
 - **FR-063** WebSocket endpoint for real-time push: device status changes, tunnel health events, fallback alerts
 - **FR-064** REST endpoints required (minimum):
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/devices | List all devices |
-| GET | /api/devices/:id | Device detail + current routing rule |
-| PUT | /api/devices/:id/rule | Set permanent routing rule |
-| POST | /api/devices/:id/temporary | Set temporary override |
-| POST | /api/devices/:id/schedule | Add schedule rule |
-| DELETE | /api/devices/:id/schedule/:sid | Remove schedule |
-| GET | /api/tunnels | List all tunnels + health |
-| POST | /api/tunnels | Add new tunnel (import config) |
-| DELETE | /api/tunnels/:id | Remove tunnel |
-| GET | /api/dns/stats | Blocked query count, per device |
-| PUT | /api/dns/blocklists | Update blocklist config |
-| GET | /api/system/status | CPU, memory, uptime, version |
-| POST | /api/auth/login | Authenticate |
-| POST | /api/auth/logout | Invalidate session |
+| Method | Path                           | Description                          |
+|--------|--------------------------------|--------------------------------------|
+| GET    | /api/devices                   | List all devices                     |
+| GET    | /api/devices/:id               | Device detail + current routing rule |
+| PUT    | /api/devices/:id/rule          | Set permanent routing rule           |
+| POST   | /api/devices/:id/temporary     | Set temporary override               |
+| POST   | /api/devices/:id/schedule      | Add schedule rule                    |
+| DELETE | /api/devices/:id/schedule/:sid | Remove schedule                      |
+| GET    | /api/tunnels                   | List all tunnels + health            |
+| POST   | /api/tunnels                   | Add new tunnel (import config)       |
+| DELETE | /api/tunnels/:id               | Remove tunnel                        |
+| GET    | /api/dns/stats                 | Blocked query count, per device      |
+| PUT    | /api/dns/blocklists            | Update blocklist config              |
+| GET    | /api/system/status             | CPU, memory, uptime, version         |
+| POST   | /api/auth/login                | Authenticate                         |
+| POST   | /api/auth/logout               | Invalidate session                   |
 
 ---
 
@@ -345,9 +345,9 @@ Output formatted with `tabled` for human-readable tables, `serde_json` for `--js
 │         │                 │                  │           │
 │  ┌──────▼─────────────────▼──────────────────▼────────┐  │
 │  │                Internal Event Bus                  │  │
-│  └──────────────────────┬─────────────────────────────┘  │
-│                         │                                │
-│  ┌──────────────────────▼─────────────────────────────┐  │
+│  └────────────────────────┬───────────────────────────┘  │
+│                           │                              │
+│  ┌────────────────────────▼───────────────────────────┐  │
 │  │            REST + WebSocket API (axum)             │  │
 │  │             + Static Web UI (embedded)             │  │
 │  └────────────────────────────────────────────────────┘  │
@@ -406,7 +406,7 @@ id           UUID
 label        String
 country_code String (ISO 3166-1 alpha-2)
 provider     String (nullable)
-interface    String (wg0, wg1, …)
+interface    String (wg_ward0, wg_ward1, …)
 endpoint     String
 public_key   String
 last_handshake  Timestamp
@@ -475,17 +475,3 @@ POST to a webhook URL (Discord, Slack, ntfy.sh) on events: tunnel down, device f
 - Split-tunnel companion agent (Linux/macOS)
 - Guest network policy
 - Dynamic DNS support
-
----
-
-## 10. Open Questions / Decisions Needed
-
-| # | Question | Impact |
-|---|----------|--------|
-| OQ-1 | Should the API run on a separate port from the web UI, or same port? | Security surface, reverse proxy setup |
-| OQ-2 | Licence: MIT vs GPL vs Apache 2.0? | Community contribution model, forking rights |
-| OQ-3 | Should user accounts be local-only or support LDAP/SSO for small offices? | Scope of v1 auth system |
-| OQ-4 | Real-time bandwidth per device: capture via `nftables` byte counters (low cost) or full `libpcap` sniffing (higher cost, more detail)? | Performance vs feature richness |
-| OQ-5 | Should the SD card image support Pi 5 at launch or Pi 4 only? | Hardware testing matrix |
-| OQ-6 | Community governance: solo maintainer, GitHub org, or foundation model? | Contribution model, roadmap ownership |
-| OQ-7 | DNS resolver choice: Unbound (established, more complex) vs a lightweight custom resolver embedded in the daemon (simpler ops, less flexibility)? | Operational complexity, DNS feature ceiling |

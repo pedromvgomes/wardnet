@@ -29,11 +29,17 @@ wardnet/
 │   │       │   │   ├── lib.rs        # crate root (re-exports modules)
 │   │       │   │   ├── api/          # axum REST handlers + auth middleware
 │   │       │   │   ├── service/      # business logic (traits + impls)
-│   │       │   │   ├── repository/   # data access (traits + SQLite impls)
+│   │       │   │   ├── repository/   # data access traits
+│   │       │   │   │   └── sqlite/   # SQLite implementations
 │   │       │   │   ├── config.rs     # TOML config loading
 │   │       │   │   ├── db.rs         # SQLite pool + migrations
 │   │       │   │   ├── error.rs      # AppError → IntoResponse
 │   │       │   │   ├── state.rs      # AppState (service trait objects)
+│   │       │   │   ├── event.rs      # EventPublisher trait + BroadcastEventBus
+│   │       │   │   ├── keys.rs       # KeyStore trait + FileKeyStore
+│   │       │   │   ├── wireguard.rs  # WireGuardOps trait + types
+│   │       │   │   ├── tunnel_monitor.rs  # Background health/stats tasks
+│   │       │   │   ├── tunnel_idle.rs     # Idle tunnel teardown watcher
 │   │       │   │   └── web.rs        # rust-embed static file serving
 │   │       │   └── migrations/       # sqlx SQL migrations
 │   │       ├── wctl/                 # binary -- CLI tool
@@ -42,11 +48,12 @@ wardnet/
 │   │           └── src/
 │   │               ├── lib.rs
 │   │               ├── device.rs
-│   │               ├── tunnel.rs
+│   │               ├── tunnel.rs     # Tunnel, TunnelStatus, TunnelConfig
 │   │               ├── routing.rs
 │   │               ├── api.rs        # request/response DTOs
 │   │               ├── auth.rs       # Session, ApiKeyRecord, Role
-│   │               └── event.rs      # WardnetEvent enum
+│   │               ├── event.rs      # WardnetEvent enum
+│   │               └── wireguard_config.rs  # .conf parser + WgConfig types
 │   └── web-ui/                       # React + Vite project
 │       └── src/
 │           ├── api/                  # typed fetch client
@@ -59,12 +66,12 @@ wardnet/
 └── README.md
 ```
 
-> **Note:** Modules for tunnel/, routing/, device/, dns/, event/ (event bus), and install/ will be added in later milestones.
+> **Note:** Modules for routing/, device/ (detection), dns/, and install/ will be added in later milestones. Tunnel management, event bus, and key storage are implemented in Milestone 1b.
 
 ### Crate Dependencies
 
-- `wardnet-types`: serde, uuid, chrono (no runtime deps -- pure data types)
-- `wardnetd` depends on `wardnet-types` + tokio, axum, sqlx, wireguard-control, rtnetlink, pnet, rust-embed, toml, tracing
+- `wardnet-types`: serde, uuid, chrono, thiserror (no runtime deps -- pure data types)
+- `wardnetd` depends on `wardnet-types` + tokio, axum, sqlx, wireguard-control, ipnetwork, tokio-util, rust-embed, toml, tracing, argon2, async-trait
 - `wctl` depends on `wardnet-types` + clap, reqwest, tabled, tokio
 
 ### Web UI Stack
@@ -80,7 +87,7 @@ React + TypeScript, Vite, Tailwind CSS, TanStack Query, Zustand, React Router
 1. Parse CLI args, load config from `/etc/wardnet/wardnet.toml`
 2. Initialize tracing/logging
 3. Open SQLite (WAL mode), run migrations
-4. Create EventBus (`tokio::broadcast`)
+4. Create EventPublisher (`BroadcastEventBus` wrapping `tokio::broadcast`)
 5. Start TunnelManager -- restore tunnels from DB (but do NOT bring interfaces up yet -- tunnels start on-demand)
 6. Start RoutingEngine -- reconcile DB state with kernel (ip rule, nftables)
 7. Start DeviceDetector -- ARP/packet sniffing on LAN interface
@@ -90,7 +97,7 @@ React + TypeScript, Vite, Tailwind CSS, TanStack Query, Zustand, React Router
 
 ### Internal Event Bus
 
-Components communicate via `tokio::broadcast::Sender<WardnetEvent>`:
+Components communicate via the `EventPublisher` trait (backed by `tokio::broadcast`):
 
 ```
 TunnelManager  --> TunnelUp, TunnelDown, TunnelStatsUpdated
@@ -162,8 +169,8 @@ Two-tier model: unauthenticated self-service for regular users, admin login for 
 
 ### Key Design Decisions
 
-1. **Trait-based system abstractions** -- NetlinkOps, WireGuardOps, FirewallOps traits allow mocking for tests without root
-2. **Event bus over direct coupling** -- components are independently testable
+1. **Trait-based system abstractions** -- WireGuardOps, KeyStore, EventPublisher, FirewallOps (future) traits allow mocking for tests without root
+2. **Event bus over direct coupling** -- `EventPublisher` trait with `BroadcastEventBus` impl; components are independently testable
 3. **nftables DNAT for DNS leak prevention** -- more reliable than Unbound per-client config
 4. **Single binary with embedded web UI** -- rust-embed, no separate web server
 5. **Reconciliation on startup** -- daemon reads DB desired state and applies to kernel, handles crashes/reboots
@@ -234,21 +241,23 @@ When device IP changes (DHCP renewal), remove old rules and apply new ones.
 
 **Deliverable:** `cargo run` starts daemon, serves web UI, auth works, responds to `/api/system/status`.
 
-### Milestone 1b: WireGuard Tunnel Management
+### Milestone 1b: WireGuard Tunnel Management ✅
 
 **Goal:** Create, destroy, and monitor WireGuard tunnels via API. Tunnels start down and are brought up on-demand.
 
-- [ ] WireGuard `.conf` file parser
-- [ ] TunnelManager: create/destroy interfaces via `wireguard-control` (netlink)
-- [ ] Lazy lifecycle: tunnels configured but down by default, brought up via explicit `bring_up(tunnel_id)` call
-- [ ] Tunnel persistence in SQLite; restore configs (not interfaces) on daemon start
-- [ ] Health monitoring: background task polling `last_handshake` every 10s for active tunnels, emit events
-- [ ] Stats collection: byte counters every 5s for active tunnels
-- [ ] Idle tunnel teardown: subscribe to `DeviceGone`, start countdown, tear down if no devices need it
-- [ ] EventBus wired with tunnel events
-- [ ] API (admin only): `GET /api/tunnels`, `POST /api/tunnels`, `DELETE /api/tunnels/:id`
-- [ ] Interface naming: `wg_ward0`, `wg_ward1`, ... (avoid collisions)
-- [ ] Unit tests for config parser; integration tests for interface lifecycle (require capabilities, `#[ignore]`)
+- [x] WireGuard `.conf` file parser (`wardnet-types/src/wireguard_config.rs`)
+- [x] WireGuardOps trait + RealWireGuard (Linux kernel + macOS userspace) + NoopWireGuard (`--mock-network`)
+- [x] Lazy lifecycle: tunnels configured but down by default, brought up via explicit `bring_up(tunnel_id)` call
+- [x] Tunnel persistence in SQLite (address, dns, peer_config JSON columns); restore configs on daemon start
+- [x] Health monitoring: background TunnelMonitor polling `last_handshake` every 10s for active tunnels
+- [x] Stats collection: TunnelMonitor polls byte counters every 5s for active tunnels, publishes events
+- [x] Idle tunnel teardown: IdleTunnelWatcher scaffold (full implementation in Milestone 1c when DeviceGone events exist)
+- [x] EventPublisher trait + BroadcastEventBus wired with tunnel events
+- [x] KeyStore trait + FileKeyStore for private keys on disk (mode 0600, never in DB or API)
+- [x] API (admin only): `GET /api/tunnels`, `POST /api/tunnels`, `DELETE /api/tunnels/:id`
+- [x] Interface naming: `wg_ward0`, `wg_ward1`, ... (sequential from DB)
+- [x] Repository refactored: traits in `repository/<name>.rs`, SQLite impls in `repository/sqlite/<name>.rs`
+- [x] 97 tests total: .conf parser (10), event bus (3), key store (5), tunnel repository integration (11), tunnel service unit (7), plus all existing tests (61)
 
 **Deliverable:** Add tunnel via API, bring it up on demand, monitor health, tear it down.
 
@@ -391,7 +400,7 @@ When device IP changes (DHCP renewal), remove old rules and apply new ones.
 - **Daemon dev:** `cd source/daemon && cargo run -p wardnetd -- --verbose` -- reads web-ui/dist/ from filesystem in debug mode (rust-embed)
 - **CLI dev:** `cd source/daemon && cargo run -p wctl -- <command>`
 - **Networking dev on macOS:** Use a Linux VM (Multipass/Docker) for kernel networking tests
-- **Mock mode:** `wardnetd --mock-network` logs all kernel commands instead of executing (for UI development without real tunnels)
+- **Mock mode:** `wardnetd --mock-network` uses NoopWireGuard (logs all operations instead of executing) for UI development without real tunnels
 
 ---
 

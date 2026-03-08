@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::config::Config;
-use crate::service::{AuthService, DeviceService, SystemService};
+use crate::event::EventPublisher;
+use crate::service::{AuthService, DeviceService, SystemService, TunnelService};
 
 /// Shared application state, cheaply cloneable via `Arc`.
 ///
@@ -16,14 +17,19 @@ struct Inner {
     auth_service: Arc<dyn AuthService>,
     device_service: Arc<dyn DeviceService>,
     system_service: Arc<dyn SystemService>,
+    tunnel_service: Arc<dyn TunnelService>,
+    event_publisher: Arc<dyn EventPublisher>,
     config: Config,
 }
 
 impl AppState {
+    /// Create a new application state with the given services and configuration.
     pub fn new(
         auth_service: Arc<dyn AuthService>,
         device_service: Arc<dyn DeviceService>,
         system_service: Arc<dyn SystemService>,
+        tunnel_service: Arc<dyn TunnelService>,
+        event_publisher: Arc<dyn EventPublisher>,
         config: Config,
     ) -> Self {
         Self {
@@ -31,6 +37,8 @@ impl AppState {
                 auth_service,
                 device_service,
                 system_service,
+                tunnel_service,
+                event_publisher,
                 config,
             }),
         }
@@ -49,6 +57,16 @@ impl AppState {
     #[must_use]
     pub fn system_service(&self) -> &dyn SystemService {
         self.inner.system_service.as_ref()
+    }
+
+    #[must_use]
+    pub fn tunnel_service(&self) -> &dyn TunnelService {
+        self.inner.tunnel_service.as_ref()
+    }
+
+    #[must_use]
+    pub fn event_publisher(&self) -> &dyn EventPublisher {
+        self.inner.event_publisher.as_ref()
     }
 
     #[must_use]

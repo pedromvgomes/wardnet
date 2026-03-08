@@ -84,3 +84,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "coo
 tabled = "0.18"
 # https://crates.io/crates/async-trait
 async-trait = "0.1"
+# https://crates.io/crates/wireguard-control
+wireguard-control = "1"
+# https://crates.io/crates/ipnetwork
+ipnetwork = "0.20"
+# https://crates.io/crates/tokio-util
+tokio-util = { version = "0.7", features = ["rt"] }

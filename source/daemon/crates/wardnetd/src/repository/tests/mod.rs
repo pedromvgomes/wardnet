@@ -3,6 +3,7 @@ mod api_key;
 mod device;
 mod session;
 mod system_config;
+mod tunnel;
 
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;

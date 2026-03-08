@@ -17,3 +17,5 @@ serde_json.workspace = true
 uuid.workspace = true
 # https://crates.io/crates/chrono
 chrono.workspace = true
+# https://crates.io/crates/thiserror
+thiserror.workspace = true

@@ -60,3 +60,9 @@ mime_guess.workspace = true
 async-trait.workspace = true
 # https://crates.io/crates/clap
 clap.workspace = true
+# https://crates.io/crates/wireguard-control
+wireguard-control.workspace = true
+# https://crates.io/crates/ipnetwork
+ipnetwork.workspace = true
+# https://crates.io/crates/tokio-util
+tokio-util.workspace = true

@@ -12,6 +12,7 @@ pub struct Config {
     pub logging: LoggingConfig,
     pub network: NetworkConfig,
     pub auth: AuthConfig,
+    pub tunnel: TunnelConfig,
 }
 
 /// HTTP server configuration.
@@ -103,6 +104,31 @@ impl Default for AuthConfig {
     }
 }
 
+/// `WireGuard` tunnel management settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TunnelConfig {
+    /// Directory for `WireGuard` private key files.
+    pub keys_dir: PathBuf,
+    /// Seconds before an idle tunnel is torn down.
+    pub idle_timeout_secs: u64,
+    /// Seconds between health checks for active tunnels.
+    pub health_check_interval_secs: u64,
+    /// Seconds between stats collection for active tunnels.
+    pub stats_interval_secs: u64,
+}
+
+impl Default for TunnelConfig {
+    fn default() -> Self {
+        Self {
+            keys_dir: PathBuf::from("/etc/wardnet/keys"),
+            idle_timeout_secs: 600,
+            health_check_interval_secs: 10,
+            stats_interval_secs: 5,
+        }
+    }
+}
+
 impl Config {
     /// Load configuration from the given TOML file path. If the file does not
     /// exist, returns default configuration.
@@ -135,5 +161,9 @@ mod tests {
         assert_eq!(config.network.lan_interface, "eth0");
         assert_eq!(config.network.default_policy, "direct");
         assert_eq!(config.auth.session_expiry_hours, 24);
+        assert_eq!(config.tunnel.keys_dir, PathBuf::from("/etc/wardnet/keys"));
+        assert_eq!(config.tunnel.idle_timeout_secs, 600);
+        assert_eq!(config.tunnel.health_check_interval_secs, 10);
+        assert_eq!(config.tunnel.stats_interval_secs, 5);
     }
 }

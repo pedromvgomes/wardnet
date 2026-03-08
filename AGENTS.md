@@ -2,6 +2,10 @@
 
 Self-hosted network privacy gateway for Raspberry Pi. See [README.md](README.md) for full overview.
 
+## Agent Memory
+
+Agent memory files live at the **repo root** under `.claude/agent-memory/<agent-type>/MEMORY.md`. When saving or reading agent memory, always use the repo root path, NOT a subdirectory like `source/daemon/`.
+
 ## Commands
 
 ### Daemon (Rust)
@@ -48,9 +52,16 @@ source/
 │       │       ├── config.rs        # TOML config loading with defaults
 │       │       ├── db.rs            # SQLite pool init (WAL mode, migrations)
 │       │       ├── error.rs         # AppError → axum IntoResponse
-│       │       ├── state.rs         # AppState (holds service trait objects)
+│       │       ├── state.rs         # AppState (holds service trait objects + event publisher)
+│       │       ├── event.rs         # EventPublisher trait + BroadcastEventBus
+│       │       ├── keys.rs          # KeyStore trait + FileKeyStore (private key files)
+│       │       ├── wireguard.rs     # WireGuardOps trait + types
+│       │       ├── wireguard_real.rs  # Real WireGuard impl (Linux + macOS)
+│       │       ├── wireguard_noop.rs  # No-op impl (--mock-network)
+│       │       ├── tunnel_monitor.rs  # Background health check + stats collection
+│       │       ├── tunnel_idle.rs     # Idle tunnel teardown on DeviceGone
 │       │       ├── web.rs           # rust-embed static file serving
-│       │       ├── repository/      # Data access layer (traits + SQLite impls)
+│       │       ├── repository/      # Data access layer (traits in root, SQLite impls in sqlite/)
 │       │       ├── service/         # Business logic layer (traits + impls)
 │       │       └── api/             # HTTP handlers (thin, delegate to services)
 │       └── wctl/                    # CLI tool (clap)
@@ -88,14 +99,14 @@ main.rs  →  builds concrete implementations, injects into AppState
               │
 API layer     │  Thin HTTP handlers, extract request, call service, return response
               ↓
-Service layer │  Business logic via traits (AuthService, DeviceService, SystemService)
+Service layer │  Business logic via traits (AuthService, DeviceService, TunnelService, SystemService)
               ↓
-Repository    │  Data access via traits (AdminRepository, DeviceRepository, etc.)
+Repository    │  Data access via traits (AdminRepository, DeviceRepository, TunnelRepository, etc.)
               ↓
 SQLite        │  Parameterized queries only (`.bind()`), never string interpolation
 ```
 
-- **Traits define boundaries** — every layer depends on trait interfaces, not concrete types
+- **Traits define ALL boundaries** — every layer depends on trait interfaces, not concrete types. This includes infrastructure: `WireGuardOps`, `KeyStore`, `EventPublisher`
 - **`main.rs`** uses `wardnetd::` paths (separate binary crate); all other files use `crate::` paths
 - **`AppState`** holds `Arc<dyn Service>` trait objects, no pool exposed to handlers
 - **API handlers never touch the database** — they call services, services call repositories
@@ -109,10 +120,11 @@ SQLite        │  Parameterized queries only (`.bind()`), never string interpol
 ### Rust
 - Doc comments on every public trait, struct, and enum explaining its responsibility
 - `#[must_use]` on pure accessor methods (enforced by clippy pedantic)
-- Tests in `src/<layer>/tests/<module>.rs` pattern with `#[cfg(test)] mod tests;` in the layer's `mod.rs`
-- Service tests use mock structs implementing repository traits
+- **Tests MUST go in separate files** — `src/<layer>/tests/<module>.rs` with `#[cfg(test)] mod tests;` in the layer's `mod.rs`. For crate-level modules, use `src/tests/<module>.rs` with `#[cfg(test)] mod tests;` in `lib.rs`. NEVER put test blocks inline in source files.
+- Service tests use mock structs implementing repository/infrastructure traits (manually defined, no mocking libraries)
 - Repository tests use in-memory SQLite with migrations applied
-- Simple standalone modules (like `config.rs`) may keep inline `#[cfg(test)] mod tests`
+- Infrastructure tests (event bus, key store) use dedicated test files under `src/tests/`
+- All traits (WireGuardOps, KeyStore, EventPublisher, repositories) have test doubles for unit testing
 
 ### Web UI
 - Prettier for formatting (configured in `.prettierrc`)

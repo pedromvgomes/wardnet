@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS tunnels (
     last_handshake TEXT,
     bytes_tx       INTEGER NOT NULL DEFAULT 0,
     bytes_rx       INTEGER NOT NULL DEFAULT 0,
+    address        TEXT NOT NULL DEFAULT '[]',
+    dns            TEXT NOT NULL DEFAULT '[]',
+    peer_config    TEXT NOT NULL DEFAULT '{}',
+    listen_port    INTEGER,
     created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 

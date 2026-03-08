@@ -30,9 +30,10 @@ source/
 Layered architecture with dependency injection via traits:
 
 - **Repository layer** — data access traits + SQLite implementations
-- **Service layer** — business logic traits + implementations (auth, device, system)
+- **Service layer** — business logic traits + implementations (auth, device, tunnel, system)
 - **API layer** — thin axum HTTP handlers that delegate to services
-- **State** — holds service trait objects, injected at startup
+- **Infrastructure** — EventPublisher (event bus), WireGuardOps (tunnel control), KeyStore (private key files), TunnelMonitor (background stats/health)
+- **State** — holds service trait objects + event publisher, injected at startup
 
 ### Web UI
 
@@ -40,14 +41,14 @@ React 19 + Vite 7 + Tailwind CSS 4 + TanStack Query 5 + React Router 7. Built ar
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Daemon | Rust 1.94, axum 0.8, SQLite (sqlx 0.8) |
-| Web UI | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4 |
-| Package manager | Yarn 4 |
-| Auth | argon2 (passwords/API keys), SHA-256 (session tokens) |
-| Tunnels | WireGuard |
-| Target | Raspberry Pi (aarch64), Linux x86_64, macOS aarch64 |
+| Component       | Technology                                            |
+|-----------------|-------------------------------------------------------|
+| Daemon          | Rust 1.94, axum 0.8, SQLite (sqlx 0.8)                |
+| Web UI          | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4      |
+| Package manager | Yarn 4                                                |
+| Auth            | argon2 (passwords/API keys), SHA-256 (session tokens) |
+| Tunnels         | WireGuard                                             |
+| Target          | Raspberry Pi (aarch64), Linux x86_64, macOS aarch64   |
 
 ## Getting Started
 
@@ -81,6 +82,9 @@ cargo build --release
 
 # Run with verbose logging
 ./target/release/wardnetd --verbose
+
+# Run without real WireGuard (for development)
+./target/release/wardnetd --mock-network --verbose
 ```
 
 ### Development

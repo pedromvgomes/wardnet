@@ -2,9 +2,10 @@ pub mod auth;
 pub mod devices;
 pub mod middleware;
 pub mod system;
+pub mod tunnels;
 
 use axum::Router;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -20,7 +21,12 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(auth::login))
         .route("/devices/me", get(devices::get_me))
         .route("/devices/me/rule", put(devices::set_my_rule))
-        .route("/system/status", get(system::status));
+        .route("/system/status", get(system::status))
+        .route(
+            "/tunnels",
+            get(tunnels::list_tunnels).post(tunnels::create_tunnel),
+        )
+        .route("/tunnels/{id}", delete(tunnels::delete_tunnel));
 
     Router::new()
         .nest("/api", api)
