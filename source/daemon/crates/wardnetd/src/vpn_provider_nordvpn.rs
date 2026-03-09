@@ -24,6 +24,10 @@ pub trait NordVpnApi: Send + Sync {
     /// Fetch recommended servers, optionally filtered by country.
     async fn list_servers(&self, filter: &NordServerFilter) -> anyhow::Result<Vec<NordServer>>;
 
+    /// Fetch a single server by its hostname (e.g. `pt131.nordvpn.com`).
+    /// Used for dedicated IP servers not in recommendations.
+    async fn get_server_by_hostname(&self, hostname: &str) -> anyhow::Result<NordServer>;
+
     /// Get a `WireGuard` private key for the authenticated user.
     async fn get_wireguard_private_key(
         &self,
@@ -198,6 +202,18 @@ impl NordVpnApi for RealNordVpnApi {
         Ok(countries)
     }
 
+    async fn get_server_by_hostname(&self, hostname: &str) -> anyhow::Result<NordServer> {
+        let url = format!(
+            "{}/v1/servers?filters[hostname]={hostname}&limit=1",
+            self.base_url
+        );
+        let servers: Vec<NordServer> = self.client.get(&url).send().await?.json().await?;
+        servers
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("server not found: {hostname}"))
+    }
+
     async fn list_servers(&self, filter: &NordServerFilter) -> anyhow::Result<Vec<NordServer>> {
         let mut url = format!(
             "{}/v1/servers/recommendations?filters[servers_technologies][identifier]=wireguard_udp&limit={}",
@@ -249,6 +265,26 @@ impl NordVpnProvider {
     #[must_use]
     pub fn new(api: Arc<dyn NordVpnApi>) -> Self {
         Self { api }
+    }
+
+    /// Convert a `NordServer` into a [`ServerInfo`].
+    fn to_server_info(s: &NordServer) -> ServerInfo {
+        ServerInfo {
+            id: s.id.to_string(),
+            name: s.name.clone(),
+            country_code: s
+                .locations
+                .first()
+                .map(|l| l.country.code.to_uppercase())
+                .unwrap_or_default(),
+            city: s
+                .locations
+                .first()
+                .and_then(|l| l.country.city.as_ref())
+                .map(|c| c.name.clone()),
+            hostname: s.hostname.clone(),
+            load: s.load,
+        }
     }
 
     /// Extract the `WireGuard` public key from a `NordServer`'s technology metadata.
@@ -316,27 +352,27 @@ impl VpnProvider for NordVpnProvider {
         let servers = self.api.list_servers(&nord_filter).await?;
 
         let results: Vec<ServerInfo> = servers
-            .into_iter()
+            .iter()
             .filter(|s| filter.max_load.is_none_or(|max| s.load <= max))
-            .map(|s| ServerInfo {
-                id: s.id.to_string(),
-                name: s.name.clone(),
-                country_code: s
-                    .locations
-                    .first()
-                    .map(|l| l.country.code.to_uppercase())
-                    .unwrap_or_default(),
-                city: s
-                    .locations
-                    .first()
-                    .and_then(|l| l.country.city.as_ref())
-                    .map(|c| c.name.clone()),
-                hostname: s.hostname.clone(),
-                load: s.load,
-            })
+            .map(Self::to_server_info)
             .collect();
 
         Ok(results)
+    }
+
+    async fn resolve_server(
+        &self,
+        _credentials: &ProviderCredentials,
+        hostname: &str,
+    ) -> anyhow::Result<Option<ServerInfo>> {
+        let full_hostname = if hostname.contains('.') {
+            hostname.to_string()
+        } else {
+            format!("{hostname}.nordvpn.com")
+        };
+
+        let nord_server = self.api.get_server_by_hostname(&full_hostname).await?;
+        Ok(Some(Self::to_server_info(&nord_server)))
     }
 
     async fn generate_config(
@@ -346,33 +382,9 @@ impl VpnProvider for NordVpnProvider {
     ) -> anyhow::Result<String> {
         let private_key = self.api.get_wireguard_private_key(credentials).await?;
 
-        // Resolve country code to numeric ID for the API query.
-        let countries = self.api.list_countries().await?;
-        let country_id = countries
-            .iter()
-            .find(|c| c.code.eq_ignore_ascii_case(&server.country_code))
-            .map(|c| c.id);
-
-        // Re-fetch servers to get the full NordServer with technology metadata.
-        let servers = self
-            .api
-            .list_servers(&NordServerFilter {
-                country_id,
-                limit: 100,
-            })
-            .await?;
-
-        let nord_server = servers
-            .iter()
-            .find(|s| s.hostname == server.hostname)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "server {} not found in NordVPN server list",
-                    server.hostname
-                )
-            })?;
-
-        let public_key = Self::extract_wg_public_key(nord_server)?;
+        // Fetch full server details directly by hostname.
+        let nord_server = self.api.get_server_by_hostname(&server.hostname).await?;
+        let public_key = Self::extract_wg_public_key(&nord_server)?;
 
         Ok(format!(
             "[Interface]\n\
