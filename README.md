@@ -3,7 +3,6 @@
 [![CI](https://github.com/pedromvgomes/wardnet/actions/workflows/ci.yml/badge.svg)](https://github.com/pedromvgomes/wardnet/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/pedromvgomes/wardnet/branch/main/graph/badge.svg)](https://codecov.io/gh/pedromvgomes/wardnet)
 [![Rust](https://img.shields.io/badge/rust-1.94-orange.svg)](https://www.rust-lang.org)
-[![dependency status](https://deps.rs/repo/github/pedromvgomes/wardnet/status.svg)](https://deps.rs/repo/github/pedromvgomes/wardnet)
 [![Rust Report Card](https://rust-reportcard.xuri.me/badge/github.com/pedromvgomes/wardnet)](https://rust-reportcard.xuri.me/report/github.com/pedromvgomes/wardnet)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
