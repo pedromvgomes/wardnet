@@ -96,7 +96,10 @@ fn sample_server_with_city(
 ) -> NordServer {
     NordServer {
         id: 1234,
-        name: format!("{country_code} #{}", hostname.split('.').next().unwrap_or("1")),
+        name: format!(
+            "{country_code} #{}",
+            hostname.split('.').next().unwrap_or("1")
+        ),
         hostname: hostname.to_string(),
         load,
         station: "1.2.3.4".to_string(),
@@ -188,10 +191,7 @@ async fn info_returns_correct_metadata() {
         info.icon_url.as_deref(),
         Some("https://nordvpn.com/favicon.ico")
     );
-    assert_eq!(
-        info.website_url.as_deref(),
-        Some("https://nordvpn.com")
-    );
+    assert_eq!(info.website_url.as_deref(), Some("https://nordvpn.com"));
 }
 
 #[tokio::test]
@@ -224,7 +224,12 @@ async fn validate_credentials_propagates_error() {
 
     let result = provider.validate_credentials(&token_credentials()).await;
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("connection refused"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("connection refused")
+    );
 }
 
 #[tokio::test]
@@ -318,20 +323,14 @@ async fn generate_config_produces_valid_wireguard() {
         "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo="
     );
     assert_eq!(parsed.interface.address, vec!["10.5.0.2/16"]);
-    assert_eq!(
-        parsed.interface.dns,
-        vec!["103.86.96.100", "103.86.99.100"]
-    );
+    assert_eq!(parsed.interface.dns, vec!["103.86.96.100", "103.86.99.100"]);
     assert_eq!(parsed.peers.len(), 1);
     assert_eq!(parsed.peers[0].public_key, "dGVzdC1wdWJsaWMta2V5");
     assert_eq!(
         parsed.peers[0].endpoint.as_deref(),
         Some("se142.nordvpn.com:51820")
     );
-    assert_eq!(
-        parsed.peers[0].allowed_ips,
-        vec!["0.0.0.0/0", "::/0"]
-    );
+    assert_eq!(parsed.peers[0].allowed_ips, vec!["0.0.0.0/0", "::/0"]);
     assert_eq!(parsed.peers[0].persistent_keepalive, Some(25));
 }
 
@@ -401,10 +400,12 @@ async fn generate_config_api_key_error() {
         .generate_config(&token_credentials(), &server_info)
         .await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("API key retrieval failed"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("API key retrieval failed")
+    );
 }
 
 #[tokio::test]
@@ -443,10 +444,12 @@ async fn extract_wg_public_key_missing_tech() {
     let server = server_without_wg("test.nordvpn.com");
     let result = NordVpnProvider::extract_wg_public_key(&server);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("does not support WireGuard"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("does not support WireGuard")
+    );
 }
 
 #[tokio::test]
@@ -454,17 +457,23 @@ async fn extract_wg_public_key_missing_metadata() {
     let server = server_wg_no_key("test.nordvpn.com");
     let result = NordVpnProvider::extract_wg_public_key(&server);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("no WireGuard public key"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("no WireGuard public key")
+    );
 }
 
 #[tokio::test]
 async fn list_servers_resolves_country_code_to_id() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await =
-        vec![sample_server_with_city("se142.nordvpn.com", 25, "SE", Some("Stockholm"))];
+    *mock.servers.lock().await = vec![sample_server_with_city(
+        "se142.nordvpn.com",
+        25,
+        "SE",
+        Some("Stockholm"),
+    )];
     let provider = NordVpnProvider::new(Arc::new(mock));
 
     // Filtering by country code "SE" should resolve to numeric ID 208 internally
@@ -502,4 +511,93 @@ async fn list_servers_with_unknown_country_code_passes_none() {
 
     assert_eq!(servers.len(), 1);
     assert_eq!(servers[0].hostname, "xx1.nordvpn.com");
+}
+
+#[tokio::test]
+async fn generate_config_rejects_credentials_auth_via_api() {
+    let mock = MockNordVpnApi::new();
+    *mock.servers.lock().await = vec![sample_server("se142.nordvpn.com", 25, "SE")];
+    // Simulate the real API behavior: Credentials auth returns an error for WireGuard key generation.
+    *mock.private_key_result.lock().await =
+        Err("NordVPN requires token authentication for WireGuard key generation".to_string());
+    let provider = NordVpnProvider::new(Arc::new(mock));
+
+    let server_info = ServerInfo {
+        id: "1234".to_string(),
+        name: "SE #se142".to_string(),
+        country_code: "SE".to_string(),
+        city: None,
+        hostname: "se142.nordvpn.com".to_string(),
+        load: 25,
+    };
+
+    let creds = ProviderCredentials::Credentials {
+        username: "user".to_string(),
+        password: "pass".to_string(),
+    };
+
+    let result = provider.generate_config(&creds, &server_info).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("token authentication"), "got: {err}");
+}
+
+#[tokio::test]
+async fn list_servers_case_insensitive_country_code() {
+    let mock = MockNordVpnApi::new();
+    *mock.servers.lock().await = vec![sample_server("se142.nordvpn.com", 25, "SE")];
+    let provider = NordVpnProvider::new(Arc::new(mock));
+
+    // Use lowercase "se" -- should resolve to the same country ID 208.
+    let filter = ServerFilter {
+        country: Some("se".to_string()),
+        max_load: None,
+    };
+    let servers = provider
+        .list_servers(&token_credentials(), &filter)
+        .await
+        .unwrap();
+
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].hostname, "se142.nordvpn.com");
+}
+
+#[tokio::test]
+async fn list_servers_no_country_filter_skips_country_lookup() {
+    let mock = MockNordVpnApi::new();
+    *mock.servers.lock().await = vec![
+        sample_server("se1.nordvpn.com", 10, "SE"),
+        sample_server("us1.nordvpn.com", 20, "US"),
+    ];
+    let provider = NordVpnProvider::new(Arc::new(mock));
+
+    let filter = ServerFilter {
+        country: None,
+        max_load: None,
+    };
+    let servers = provider
+        .list_servers(&token_credentials(), &filter)
+        .await
+        .unwrap();
+
+    assert_eq!(servers.len(), 2);
+}
+
+#[tokio::test]
+async fn list_servers_server_without_locations_has_empty_country_code() {
+    let mock = MockNordVpnApi::new();
+    let mut server = sample_server("noloc.nordvpn.com", 10, "SE");
+    server.locations.clear();
+    *mock.servers.lock().await = vec![server];
+    let provider = NordVpnProvider::new(Arc::new(mock));
+
+    let filter = ServerFilter::default();
+    let servers = provider
+        .list_servers(&token_credentials(), &filter)
+        .await
+        .unwrap();
+
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].country_code, "");
+    assert!(servers[0].city.is_none());
 }

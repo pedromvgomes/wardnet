@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::device::{Device, DeviceType};
-use crate::vpn_provider::{ProviderCredentials, ProviderInfo, ServerFilter, ServerInfo};
 use crate::routing::RoutingTarget;
 use crate::tunnel::Tunnel;
+use crate::vpn_provider::{ProviderCredentials, ProviderInfo, ServerFilter, ServerInfo};
 
 /// Login request body.
 #[derive(Debug, Deserialize)]

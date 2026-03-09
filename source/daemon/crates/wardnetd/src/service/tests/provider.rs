@@ -57,7 +57,6 @@ impl MockVpnProvider {
         *self.servers.lock().unwrap() = servers;
         self
     }
-
 }
 
 #[async_trait]

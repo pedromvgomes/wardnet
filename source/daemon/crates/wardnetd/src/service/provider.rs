@@ -51,10 +51,7 @@ pub struct ProviderServiceImpl {
 
 impl ProviderServiceImpl {
     /// Create a new provider service with the given registry and tunnel service.
-    pub fn new(
-        registry: Arc<VpnProviderRegistry>,
-        tunnel_service: Arc<dyn TunnelService>,
-    ) -> Self {
+    pub fn new(registry: Arc<VpnProviderRegistry>, tunnel_service: Arc<dyn TunnelService>) -> Self {
         Self {
             registry,
             tunnel_service,
@@ -155,9 +152,7 @@ impl ProviderService for ProviderServiceImpl {
                 .iter()
                 .find(|s| s.id == *server_id)
                 .cloned()
-                .ok_or_else(|| {
-                    AppError::NotFound(format!("server '{server_id}' not found"))
-                })?
+                .ok_or_else(|| AppError::NotFound(format!("server '{server_id}' not found")))?
         } else {
             servers
                 .iter()
@@ -189,10 +184,7 @@ impl ProviderService for ProviderServiceImpl {
         Ok(SetupProviderResponse {
             tunnel: tunnel_response.tunnel,
             server,
-            message: format!(
-                "tunnel created via {} ({})",
-                info.name, info.id
-            ),
+            message: format!("tunnel created via {} ({})", info.name, info.id),
         })
     }
 }

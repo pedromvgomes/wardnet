@@ -291,11 +291,7 @@ impl Config {
     /// is explicitly set to `false` in the `[providers.enabled]` table.
     #[must_use]
     pub fn is_provider_enabled(&self, id: &str) -> bool {
-        self.providers
-            .enabled
-            .get(id)
-            .copied()
-            .unwrap_or(true)
+        self.providers.enabled.get(id).copied().unwrap_or(true)
     }
 
     /// Load configuration from the given TOML file path. If the file does not

@@ -15,10 +15,8 @@ use crate::vpn_provider::VpnProvider;
 #[async_trait]
 pub trait NordVpnApi: Send + Sync {
     /// Validate credentials against `NordVPN`'s API.
-    async fn validate_credentials(
-        &self,
-        credentials: &ProviderCredentials,
-    ) -> anyhow::Result<bool>;
+    async fn validate_credentials(&self, credentials: &ProviderCredentials)
+    -> anyhow::Result<bool>;
 
     /// Fetch the list of available countries with their numeric IDs.
     async fn list_countries(&self) -> anyhow::Result<Vec<NordCountryInfo>>;
@@ -222,10 +220,7 @@ impl NordVpnApi for RealNordVpnApi {
             ProviderCredentials::Token { token } => {
                 let resp: NordCredentialsResponse = self
                     .client
-                    .get(format!(
-                        "{}/v1/users/services/credentials",
-                        self.base_url
-                    ))
+                    .get(format!("{}/v1/users/services/credentials", self.base_url))
                     .header("Authorization", format!("Bearer token:{token}"))
                     .send()
                     .await?

@@ -13,10 +13,8 @@ pub trait VpnProvider: Send + Sync {
     fn info(&self) -> ProviderInfo;
 
     /// Validate that the given credentials are accepted by the provider.
-    async fn validate_credentials(
-        &self,
-        credentials: &ProviderCredentials,
-    ) -> anyhow::Result<bool>;
+    async fn validate_credentials(&self, credentials: &ProviderCredentials)
+    -> anyhow::Result<bool>;
 
     /// Fetch available servers, optionally filtered.
     async fn list_servers(

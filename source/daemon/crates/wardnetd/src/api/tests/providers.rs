@@ -294,10 +294,7 @@ fn build_state(provider_svc: impl ProviderService + 'static) -> AppState {
 
 fn provider_router(state: AppState) -> Router {
     Router::new()
-        .route(
-            "/api/providers",
-            get(crate::api::providers::list_providers),
-        )
+        .route("/api/providers", get(crate::api::providers::list_providers))
         .route(
             "/api/providers/{id}/validate",
             post(crate::api::providers::validate_credentials),
@@ -408,12 +405,8 @@ async fn validate_credentials_returns_json() {
         }
     });
 
-    let (status, json) = post_json(
-        app,
-        "/api/providers/test-vpn/validate",
-        &body.to_string(),
-    )
-    .await;
+    let (status, json) =
+        post_json(app, "/api/providers/test-vpn/validate", &body.to_string()).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["valid"], true);
@@ -469,12 +462,7 @@ async fn list_servers_returns_json() {
         }
     });
 
-    let (status, json) = post_json(
-        app,
-        "/api/providers/test-vpn/servers",
-        &body.to_string(),
-    )
-    .await;
+    let (status, json) = post_json(app, "/api/providers/test-vpn/servers", &body.to_string()).await;
 
     assert_eq!(status, StatusCode::OK);
     let servers = json["servers"].as_array().unwrap();
@@ -502,12 +490,7 @@ async fn setup_tunnel_returns_json() {
         "country": "SE"
     });
 
-    let (status, json) = post_json(
-        app,
-        "/api/providers/test-vpn/setup",
-        &body.to_string(),
-    )
-    .await;
+    let (status, json) = post_json(app, "/api/providers/test-vpn/setup", &body.to_string()).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["tunnel"]["label"], "Test VPN - Sweden #142");

@@ -35,10 +35,10 @@ use wardnetd::service::{
     AuthServiceImpl, DeviceDiscoveryServiceImpl, DeviceServiceImpl, ProviderServiceImpl,
     SystemServiceImpl, TunnelServiceImpl,
 };
-use wardnetd::vpn_provider_registry::VpnProviderRegistry;
 use wardnetd::state::AppState;
 use wardnetd::tunnel_idle::IdleTunnelWatcher;
 use wardnetd::tunnel_monitor::TunnelMonitor;
+use wardnetd::vpn_provider_registry::VpnProviderRegistry;
 use wardnetd::wireguard::WireGuardOps;
 use wardnetd::wireguard_noop::NoopWireGuard;
 use wardnetd::wireguard_real::RealWireGuard;
@@ -163,10 +163,7 @@ async fn run(config: Config, mock_network: bool) -> anyhow::Result<()> {
     // VPN provider registry and service.
     let registry = Arc::new(VpnProviderRegistry::new(&config));
     let provider_service: Arc<dyn wardnetd::service::ProviderService> =
-        Arc::new(ProviderServiceImpl::new(
-            registry,
-            tunnel_service.clone(),
-        ));
+        Arc::new(ProviderServiceImpl::new(registry, tunnel_service.clone()));
 
     // Create device discovery service.
     let discovery_service: Arc<dyn wardnetd::service::DeviceDiscoveryService> = Arc::new(

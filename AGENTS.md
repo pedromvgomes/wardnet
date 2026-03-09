@@ -62,7 +62,7 @@ All commands run from `source/web-ui/`. Uses **Yarn 4** (via Corepack).
 source/
 ├── daemon/                          # Rust workspace (Cargo.toml at this level)
 │   └── crates/
-│       ├── wardnet-types/           # Shared types: Device, Tunnel, RoutingTarget, Events, API DTOs
+│       ├── wardnet-types/           # Shared types: Device, Tunnel, RoutingTarget, VPN Provider types, Events, API DTOs
 │       ├── wardnetd/                # Daemon binary
 │       │   ├── build.rs             # Build script (version, OUI database generation)
 │       │   ├── data/oui.csv         # IEEE MA-L OUI database (~39K entries)
@@ -90,8 +90,11 @@ source/
 │       │       ├── oui.rs             # MAC OUI prefix lookup (full IEEE MA-L database, ~39K entries)
 │       │       ├── bootstrap.rs      # (Legacy) Admin bootstrap — no longer called from main.rs
 │       │       ├── web.rs           # rust-embed static file serving
+│       │       ├── vpn_provider.rs  # VpnProvider async trait (validate, list servers, generate config)
+│       │       ├── vpn_provider_registry.rs  # VpnProviderRegistry (config-driven, self-registering)
+│       │       ├── vpn_provider_nordvpn.rs   # NordVPN impl + NordVpnApi trait (async reqwest)
 │       │       ├── repository/      # Data access layer (traits in root, SQLite impls in sqlite/)
-│       │       ├── service/         # Business logic layer (traits + impls)
+│       │       ├── service/         # Business logic layer (traits + impls, includes ProviderService)
 │       │       └── api/             # HTTP handlers (thin, delegate to services)
 │       └── wctl/                    # CLI tool (clap)
 ├── sdk/
@@ -149,14 +152,14 @@ main.rs  →  builds concrete implementations, injects into AppState
               │
 API layer     │  Thin HTTP handlers, extract request, call service, return response
               ↓
-Service layer │  Business logic via traits (AuthService, DeviceService, TunnelService, SystemService)
+Service layer │  Business logic via traits (AuthService, DeviceService, TunnelService, SystemService, ProviderService)
               ↓
 Repository    │  Data access via traits (AdminRepository, DeviceRepository, TunnelRepository, etc.)
               ↓
 SQLite        │  Parameterized queries only (`.bind()`), never string interpolation
 ```
 
-- **Traits define ALL boundaries** — every layer depends on trait interfaces, not concrete types. This includes infrastructure: `WireGuardOps`, `KeyStore`, `EventPublisher`
+- **Traits define ALL boundaries** — every layer depends on trait interfaces, not concrete types. This includes infrastructure: `WireGuardOps`, `KeyStore`, `EventPublisher`, `NordVpnApi` (provider-specific HTTP abstraction)
 - **`main.rs`** uses `wardnetd::` paths (separate binary crate); all other files use `crate::` paths
 - **`AppState`** holds `Arc<dyn Service>` trait objects, no pool exposed to handlers
 - **API handlers never touch the database** — they call services, services call repositories

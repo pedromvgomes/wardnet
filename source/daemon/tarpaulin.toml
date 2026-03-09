@@ -1,0 +1,16 @@
+# Code coverage configuration for cargo-tarpaulin.
+#
+# Excludes binary entrypoints that are not unit-testable (main.rs files)
+# and no-op/stub implementations used only for --mock-network mode.
+
+[default]
+exclude-files = [
+    "crates/wardnetd/src/main.rs",
+    "crates/wctl/src/main.rs",
+    "crates/wardnetd/src/wireguard_real.rs",
+    "crates/wardnetd/src/wireguard_noop.rs",
+    "crates/wardnetd/src/packet_capture_noop.rs",
+    "crates/wardnetd/src/hostname_resolver_noop.rs",
+    "crates/wardnetd/src/db.rs",
+    "crates/wardnetd/src/web.rs",
+]
