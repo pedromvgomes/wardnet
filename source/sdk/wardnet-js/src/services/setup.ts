@@ -1,9 +1,5 @@
 import type { WardnetClient } from "../client.js";
-import type {
-  SetupStatusResponse,
-  SetupRequest,
-  SetupResponse,
-} from "../types/setup.js";
+import type { SetupStatusResponse, SetupRequest, SetupResponse } from "../types/setup.js";
 
 /** Setup wizard service for initial admin account creation. */
 export class SetupService {

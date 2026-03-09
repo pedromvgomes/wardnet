@@ -29,11 +29,7 @@ export type { LoginRequest, LoginResponse } from "./types/auth.js";
 export type { SystemStatusResponse } from "./types/system.js";
 
 // Types — setup
-export type {
-  SetupStatusResponse,
-  SetupRequest,
-  SetupResponse,
-} from "./types/setup.js";
+export type { SetupStatusResponse, SetupRequest, SetupResponse } from "./types/setup.js";
 
 // Types — info
 export type { InfoResponse } from "./types/info.js";
