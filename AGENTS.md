@@ -62,7 +62,7 @@ All commands run from `source/web-ui/`. Uses **Yarn 4** (via Corepack).
 source/
 ├── daemon/                          # Rust workspace (Cargo.toml at this level)
 │   └── crates/
-│       ├── wardnet-types/           # Shared types: Device, Tunnel, RoutingTarget, Events, API DTOs
+│       ├── wardnet-types/           # Shared types: Device, Tunnel, RoutingTarget, VPN Provider types, Events, API DTOs
 │       ├── wardnetd/                # Daemon binary
 │       │   ├── build.rs             # Build script (version, OUI database generation)
 │       │   ├── data/oui.csv         # IEEE MA-L OUI database (~39K entries)
@@ -90,8 +90,11 @@ source/
 │       │       ├── oui.rs             # MAC OUI prefix lookup (full IEEE MA-L database, ~39K entries)
 │       │       ├── bootstrap.rs      # (Legacy) Admin bootstrap — no longer called from main.rs
 │       │       ├── web.rs           # rust-embed static file serving
+│       │       ├── vpn_provider.rs  # VpnProvider async trait (validate, list servers, generate config)
+│       │       ├── vpn_provider_registry.rs  # VpnProviderRegistry (config-driven, self-registering)
+│       │       ├── vpn_provider_nordvpn.rs   # NordVPN impl + NordVpnApi trait (async reqwest)
 │       │       ├── repository/      # Data access layer (traits in root, SQLite impls in sqlite/)
-│       │       ├── service/         # Business logic layer (traits + impls)
+│       │       ├── service/         # Business logic layer (traits + impls, includes ProviderService)
 │       │       └── api/             # HTTP handlers (thin, delegate to services)
 │       └── wctl/                    # CLI tool (clap)
 ├── sdk/
@@ -149,14 +152,14 @@ main.rs  →  builds concrete implementations, injects into AppState
               │
 API layer     │  Thin HTTP handlers, extract request, call service, return response
               ↓
-Service layer │  Business logic via traits (AuthService, DeviceService, TunnelService, SystemService)
+Service layer │  Business logic via traits (AuthService, DeviceService, TunnelService, SystemService, ProviderService)
               ↓
 Repository    │  Data access via traits (AdminRepository, DeviceRepository, TunnelRepository, etc.)
               ↓
 SQLite        │  Parameterized queries only (`.bind()`), never string interpolation
 ```
 
-- **Traits define ALL boundaries** — every layer depends on trait interfaces, not concrete types. This includes infrastructure: `WireGuardOps`, `KeyStore`, `EventPublisher`
+- **Traits define ALL boundaries** — every layer depends on trait interfaces, not concrete types. This includes infrastructure: `WireGuardOps`, `KeyStore`, `EventPublisher`, `NordVpnApi` (provider-specific HTTP abstraction)
 - **`main.rs`** uses `wardnetd::` paths (separate binary crate); all other files use `crate::` paths
 - **`AppState`** holds `Arc<dyn Service>` trait objects, no pool exposed to handlers
 - **API handlers never touch the database** — they call services, services call repositories
@@ -318,10 +321,24 @@ async fn create_and_find_by_username() {
 - Run `cargo fmt && cargo clippy --all-targets` before committing Rust changes
 - Run `yarn format && yarn lint` before committing web UI changes
 
+## Pre-push checklist (MANDATORY)
+
+**You MUST run checks locally and fix ALL issues BEFORE every `git push`.** CI will reject the push otherwise. This is a hard gate — never push without passing checks.
+
+```bash
+# For Rust changes:
+cd source/daemon && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test --workspace
+
+# For web UI changes:
+cd source/web-ui && yarn format && yarn lint && yarn type-check
+
+# Or run everything at once:
+make check
+```
+
 ## Boundaries
 
 ### Always do
-- **Run `make check` (or the relevant `check-daemon` / `check-web` target) and fix ALL issues before pushing to remote.** This includes formatting (`cargo fmt`, `yarn format`), linting (`cargo clippy`, `yarn lint`), type checking (`yarn type-check`), and tests. CI will reject the push if any check fails — fix locally first.
 - Use parameterized `.bind()` queries for all SQL — never string-interpolate user input
 - Write tests for new functionality
 - Follow the layered architecture: handlers → services → repositories

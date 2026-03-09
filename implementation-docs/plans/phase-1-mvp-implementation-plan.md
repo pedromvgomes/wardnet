@@ -463,27 +463,27 @@ When device IP changes (DHCP renewal), remove old rules and apply new ones.
 
 **Goal:** Pluggable VPN provider system with NordVPN as the first implementation. Allows adding tunnels via guided setup instead of manual .conf import.
 
-- [ ] `VpnProvider` trait defining the provider interface:
-  - `id()` — unique provider identifier (e.g. "nordvpn")
-  - `name()` — display name (e.g. "NordVPN")
-  - `auth_methods()` — supported authentication methods (credentials, token, OAuth)
+- [x] `VpnProvider` trait defining the provider interface:
+  - `info()` — returns `ProviderInfo` (id, name, auth_methods, icon_url, website_url)
   - `validate_credentials(credentials)` — verify auth against provider API
-  - `list_servers(credentials, filters)` — fetch available servers (filterable by country, load, features)
+  - `list_servers(credentials, filters)` — fetch available servers (filterable by country, load)
   - `generate_config(credentials, server)` — produce a WireGuard .conf string for the selected server
-- [ ] Provider registry: compile-time registration of providers, stored in a `Vec<Arc<dyn VpnProvider>>`. Exposed via `ProviderService` trait.
-- [ ] `ProviderService` trait + impl: list providers, validate credentials, list servers, setup tunnel (validate → list servers → generate config → import via TunnelService)
-- [ ] NordVPN provider implementation:
-  - Auth via NordVPN service credentials (username/password from NordVPN account dashboard) or access token
-  - Fetch server list from NordVPN API (`https://api.nordvpn.com/v1/servers`) filtered by WireGuard support + country
-  - Generate WireGuard config using NordVPN's WireGuard private key exchange endpoint
-  - Server selection: by country code, with optional "recommended" (lowest load)
-- [ ] API endpoints (admin-only):
+- [x] Provider registry: `VpnProviderRegistry` with config-driven enable/disable via `[providers.enabled]` TOML section. Self-registers all built-in providers at construction.
+- [x] `ProviderService` trait + impl: list providers, validate credentials, list servers, setup tunnel (validate → list servers → pick lowest load → generate config → import via TunnelService)
+- [x] NordVPN provider implementation:
+  - `NordVpnApi` trait for testability (provider-specific HTTP abstraction, not generic HttpClient)
+  - Async `reqwest::Client` for non-blocking HTTP calls
+  - Country code resolution: calls `/v1/servers/countries` to convert ISO codes to NordVPN numeric IDs
+  - Fetch server list from NordVPN API filtered by WireGuard support + country
+  - Generate WireGuard config from API data (public key extraction from technology metadata)
+  - Server selection: by country code, with auto-select (lowest load) or explicit `server_id`
+- [x] API endpoints (admin-only):
   - `GET /api/providers` — list registered providers with metadata
-  - `POST /api/providers/:id/validate` — validate credentials for a provider
-  - `GET /api/providers/:id/servers?country=XX` — list available servers
-  - `POST /api/providers/:id/setup` — full guided setup: validate + pick server + generate config + import tunnel
-- [ ] Provider types in `wardnet-types`: `ProviderInfo`, `ProviderAuthMethod`, `ServerInfo`, `SetupProviderRequest`, `SetupProviderResponse`
-- [ ] Tests: mock HTTP client for NordVPN API, test credential validation, server listing, config generation, full setup flow
+  - `POST /api/providers/{id}/validate` — validate credentials for a provider
+  - `POST /api/providers/{id}/servers` — list available servers (POST because body contains credentials)
+  - `POST /api/providers/{id}/setup` — full guided setup: validate + pick server + generate config + import tunnel
+- [x] Provider types in `wardnet-types`: `ProviderInfo`, `ProviderAuthMethod`, `ProviderCredentials` (tagged enum), `ServerFilter`, `ServerInfo`, plus API request/response types
+- [x] Tests (38 new tests): mock `NordVpnApi` for unit tests, `MockVpnProvider` + `MockTunnelService` for service tests, `MockProviderService` for API handler tests. Serde round-trips for all provider types.
 
 **Deliverable:** Admin can add a NordVPN tunnel from the API by providing credentials and picking a country — no manual .conf file needed. Architecture ready for community to add Mullvad, ProtonVPN, etc.
 

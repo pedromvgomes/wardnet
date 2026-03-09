@@ -211,3 +211,37 @@ async fn validate_api_key_invalid() {
     let result = svc.validate_api_key("wrong-key").await.unwrap();
     assert!(result.is_none());
 }
+
+#[tokio::test]
+async fn validate_api_key_no_keys_returns_none() {
+    let svc = make_auth_service(None, None, None, vec![]);
+
+    let result = svc.validate_api_key("any-key").await.unwrap();
+    assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn validate_api_key_skips_malformed_hash() {
+    // One malformed hash and one valid hash -- the valid one should still match.
+    let valid_hash = argon2_hash("valid-key");
+    let svc = make_auth_service(
+        None,
+        Some("00000000-0000-0000-0000-000000000001".to_owned()),
+        None,
+        vec![
+            ("key-bad".to_owned(), "not-a-valid-argon2-hash".to_owned()),
+            ("key-good".to_owned(), valid_hash),
+        ],
+    );
+
+    let result = svc.validate_api_key("valid-key").await.unwrap();
+    assert!(result.is_some());
+}
+
+#[tokio::test]
+async fn is_setup_completed_delegates() {
+    let svc = make_auth_service(None, None, None, vec![]);
+    // Default MockSystemConfigRepo returns false.
+    let result = svc.is_setup_completed().await.unwrap();
+    assert!(!result);
+}

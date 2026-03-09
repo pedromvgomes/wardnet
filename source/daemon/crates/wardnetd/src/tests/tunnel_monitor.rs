@@ -433,3 +433,60 @@ async fn shutdown_stops_both_loops() {
     // Shutdown immediately -- should complete without hanging.
     monitor.shutdown().await;
 }
+
+#[tokio::test]
+async fn stats_loop_handles_find_all_error() {
+    let repo = Arc::new(MockTunnelRepo::new(vec![]));
+    *repo.find_all_error.lock().unwrap() = true;
+    let wg = Arc::new(MockWireGuardOps::returning_none());
+    let events = Arc::new(MockEventPublisher::new());
+
+    let parent = tracing::info_span!("test");
+    let monitor = TunnelMonitor::start(repo.clone(), wg, events.clone(), 1, 60, &parent);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+    monitor.shutdown().await;
+
+    // Error in find_all should not crash the loop; no stats updates or events.
+    let updates = repo.stats_updates();
+    assert!(updates.is_empty());
+    let published = events.published_events();
+    assert!(published.is_empty());
+}
+
+#[tokio::test]
+async fn health_loop_handles_find_all_error() {
+    let repo = Arc::new(MockTunnelRepo::new(vec![]));
+    *repo.find_all_error.lock().unwrap() = true;
+    let wg = Arc::new(MockWireGuardOps::returning_none());
+    let events = Arc::new(MockEventPublisher::new());
+
+    let parent = tracing::info_span!("test");
+    let monitor = TunnelMonitor::start(repo, wg, events, 60, 1, &parent);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+    monitor.shutdown().await;
+    // If we reach here, the health loop handled the error without crashing.
+}
+
+#[tokio::test]
+async fn stats_loop_handles_no_last_handshake() {
+    let tunnel_id = Uuid::new_v4();
+    let tunnel = make_tunnel(tunnel_id, "wg_ward0", TunnelStatus::Up);
+
+    let repo = Arc::new(MockTunnelRepo::new(vec![tunnel]));
+    let wg = Arc::new(MockWireGuardOps::with_stats(make_stats(500, 600, None)));
+    let events = Arc::new(MockEventPublisher::new());
+
+    let parent = tracing::info_span!("test");
+    let monitor = TunnelMonitor::start(repo.clone(), wg, events.clone(), 1, 60, &parent);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+    monitor.shutdown().await;
+
+    let updates = repo.stats_updates();
+    assert!(!updates.is_empty());
+    assert_eq!(updates[0].bytes_tx, 500);
+    assert_eq!(updates[0].bytes_rx, 600);
+    assert!(updates[0].last_handshake.is_none());
+}

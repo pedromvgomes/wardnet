@@ -518,3 +518,147 @@ async fn resolve_hostname_updates_db() {
     assert_eq!(updates.len(), 1);
     assert_eq!(updates[0].1, "myphone.local");
 }
+
+#[tokio::test]
+async fn resolve_hostname_no_result_does_not_update_db() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    // Empty resolver: no mappings, resolve returns None.
+    let h = build_harness_with_resolver(vec![device], HashMap::new());
+
+    h.svc
+        .resolve_hostname(id, "192.168.1.10".to_owned())
+        .await
+        .unwrap();
+
+    let updates = h.repo.hostname_updates.lock().unwrap();
+    assert!(
+        updates.is_empty(),
+        "no hostname update when resolver returns None"
+    );
+}
+
+#[tokio::test]
+async fn restore_devices_populates_in_memory_state() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let h = build_harness_with_devices(vec![device]);
+
+    h.svc.restore_devices().await.unwrap();
+
+    // After restore, processing the same MAC should not create a new device
+    // because restore marks devices as gone; re-observing should reappear them.
+    let obs = sample_observation("AA:BB:CC:DD:EE:01", "192.168.1.10");
+    let result = h.svc.process_observation(&obs).await.unwrap();
+    assert!(
+        matches!(result, ObservationResult::Reappeared(_)),
+        "expected Reappeared after restore, got {result:?}"
+    );
+
+    // Verify no insert was done (reappearance, not new).
+    let inserted = h.repo.inserted.lock().unwrap();
+    assert!(inserted.is_empty(), "device should not be re-inserted");
+}
+
+#[tokio::test]
+async fn restore_devices_empty_repo() {
+    let h = build_harness();
+
+    // Restore with no devices should succeed.
+    h.svc.restore_devices().await.unwrap();
+}
+
+#[tokio::test]
+async fn update_device_without_device_type_preserves_existing() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    // Update only name, leaving device_type as None.
+    let result = h
+        .svc
+        .update_device(id, Some("Kitchen Tablet"), None)
+        .await
+        .unwrap();
+
+    assert_eq!(result.name, Some("Kitchen Tablet".to_owned()));
+    // Device type should be preserved from the original.
+    assert_eq!(result.device_type, DeviceType::Phone);
+}
+
+#[tokio::test]
+async fn update_device_not_found() {
+    let h = build_harness();
+    let result = h
+        .svc
+        .update_device(Uuid::new_v4(), Some("name"), None)
+        .await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn get_device_by_id_success() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = h.svc.get_device_by_id(id).await.unwrap();
+    assert_eq!(result.id, id);
+    assert_eq!(result.mac, "AA:BB:CC:DD:EE:01");
+}
+
+#[tokio::test]
+async fn flush_last_seen_with_gone_devices_skips_them() {
+    let h = build_harness();
+    let obs = sample_observation("AA:BB:CC:DD:EE:01", "192.168.1.10");
+    h.svc.process_observation(&obs).await.unwrap();
+
+    // Mark device as departed.
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    h.svc.scan_departures(0).await.unwrap();
+
+    // Flush should skip gone devices.
+    let count = h.svc.flush_last_seen().await.unwrap();
+    assert_eq!(count, 0, "gone devices should not be flushed");
+}
+
+#[tokio::test]
+async fn process_observation_reappear_from_db_not_memory() {
+    // Device exists in DB (from a previous daemon run) but not in memory.
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let h = build_harness_with_devices(vec![device]);
+
+    // Do NOT call restore_devices, so the in-memory map is empty.
+    // Observing should find the device in the DB and reappear it.
+    let obs = sample_observation("AA:BB:CC:DD:EE:01", "192.168.1.20");
+    let result = h.svc.process_observation(&obs).await.unwrap();
+    assert!(
+        matches!(result, ObservationResult::Reappeared(_)),
+        "expected Reappeared from DB, got {result:?}"
+    );
+
+    // Verify a DeviceDiscovered event was emitted.
+    let events = h.events.published_events();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(&events[0], WardnetEvent::DeviceDiscovered { .. }));
+}

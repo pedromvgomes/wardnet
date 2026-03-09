@@ -439,3 +439,98 @@ async fn list_tunnels_returns_all() {
     let list = h.svc.list_tunnels().await.unwrap();
     assert_eq!(list.tunnels.len(), 2);
 }
+
+#[tokio::test]
+async fn bring_up_already_up_is_noop() {
+    let h = build_harness();
+    let resp = h.svc.import_tunnel(sample_request()).await.unwrap();
+    let id = resp.tunnel.id;
+
+    // Bring up the first time.
+    h.svc.bring_up(id).await.unwrap();
+
+    // Clear events from the first bring_up.
+    h.events.events.lock().unwrap().clear();
+
+    // Bring up again -- should be a no-op.
+    h.svc.bring_up(id).await.unwrap();
+
+    // No additional WireGuard calls.
+    assert_eq!(h.wireguard.created.lock().unwrap().len(), 1);
+    assert_eq!(h.wireguard.brought_up.lock().unwrap().len(), 1);
+
+    // No additional events.
+    let events = h.events.published_events();
+    assert!(events.is_empty(), "no-op bring_up should not emit events");
+}
+
+#[tokio::test]
+async fn tear_down_already_down_is_noop() {
+    let h = build_harness();
+    let resp = h.svc.import_tunnel(sample_request()).await.unwrap();
+    let id = resp.tunnel.id;
+
+    // Tunnel starts down, so tear_down should be a no-op.
+    h.svc.tear_down(id, "test").await.unwrap();
+
+    // No WireGuard calls.
+    assert!(h.wireguard.torn_down.lock().unwrap().is_empty());
+    assert!(h.wireguard.removed.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn tear_down_not_found() {
+    let h = build_harness();
+    let result = h.svc.tear_down(Uuid::new_v4(), "test").await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn delete_tunnel_tears_down_if_up() {
+    let h = build_harness();
+    let resp = h.svc.import_tunnel(sample_request()).await.unwrap();
+    let id = resp.tunnel.id;
+
+    // Bring the tunnel up first.
+    h.svc.bring_up(id).await.unwrap();
+
+    // Delete should tear down before removing.
+    let del = h.svc.delete_tunnel(id).await.unwrap();
+    assert!(del.message.contains("Sweden VPN"));
+
+    // Verify tear_down + remove_interface were called.
+    assert_eq!(h.wireguard.torn_down.lock().unwrap().len(), 1);
+    assert_eq!(h.wireguard.removed.lock().unwrap().len(), 1);
+
+    // Verify key was deleted.
+    assert!(h.keys.load_key(&id).await.is_err());
+
+    // Verify tunnel is gone.
+    assert!(matches!(
+        h.svc.get_tunnel(id).await,
+        Err(AppError::NotFound(_))
+    ));
+}
+
+#[tokio::test]
+async fn delete_tunnel_not_found() {
+    let h = build_harness();
+    let result = h.svc.delete_tunnel(Uuid::new_v4()).await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn restore_tunnels_succeeds() {
+    let h = build_harness();
+    // Import a couple of tunnels.
+    h.svc.import_tunnel(sample_request()).await.unwrap();
+
+    // restore_tunnels should succeed and not bring any tunnels up.
+    h.svc.restore_tunnels().await.unwrap();
+
+    // No WireGuard calls should have been made by restore.
+    assert!(h.wireguard.created.lock().unwrap().is_empty());
+    assert!(h.wireguard.brought_up.lock().unwrap().is_empty());
+}
