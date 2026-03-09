@@ -4,6 +4,9 @@ pub mod middleware;
 pub mod system;
 pub mod tunnels;
 
+#[cfg(test)]
+mod tests;
+
 use axum::Router;
 use axum::routing::{delete, get, post, put};
 use tower_http::cors::CorsLayer;
