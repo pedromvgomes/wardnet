@@ -317,7 +317,7 @@ impl VpnProvider for NordVpnProvider {
 
         let results: Vec<ServerInfo> = servers
             .into_iter()
-            .filter(|s| filter.max_load.map_or(true, |max| s.load <= max))
+            .filter(|s| filter.max_load.is_none_or(|max| s.load <= max))
             .map(|s| ServerInfo {
                 id: s.id.to_string(),
                 name: s.name.clone(),

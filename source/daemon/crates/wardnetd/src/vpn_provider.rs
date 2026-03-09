@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use wardnet_types::vpn_provider::{ProviderCredentials, ProviderInfo, ServerFilter, ServerInfo};
 
 /// A pluggable VPN provider that can validate credentials, list servers,
-/// and generate WireGuard configuration files.
+/// and generate `WireGuard` configuration files.
 ///
 /// Each provider implementation handles the API calls specific to that
-/// VPN service (e.g. NordVPN, Mullvad). The provider trait is the
+/// VPN service (e.g. `NordVPN`, Mullvad). The provider trait is the
 /// boundary between wardnet business logic and external VPN APIs.
 #[async_trait]
 pub trait VpnProvider: Send + Sync {
@@ -23,9 +23,9 @@ pub trait VpnProvider: Send + Sync {
         filter: &ServerFilter,
     ) -> anyhow::Result<Vec<ServerInfo>>;
 
-    /// Generate a WireGuard `.conf` string for connecting to the given server.
+    /// Generate a `WireGuard` `.conf` string for connecting to the given server.
     ///
-    /// The returned string is a complete WireGuard config that can be passed
+    /// The returned string is a complete `WireGuard` config that can be passed
     /// directly to `wireguard_config::parse()`.
     async fn generate_config(
         &self,

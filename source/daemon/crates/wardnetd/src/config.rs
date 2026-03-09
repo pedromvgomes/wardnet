@@ -270,20 +270,12 @@ impl Default for OtelConfig {
 /// [providers.enabled]
 /// nordvpn = false
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProvidersConfig {
     /// Map of provider ID to enabled flag. Providers not listed here are
     /// treated as enabled.
     pub enabled: std::collections::HashMap<String, bool>,
-}
-
-impl Default for ProvidersConfig {
-    fn default() -> Self {
-        Self {
-            enabled: std::collections::HashMap::new(),
-        }
-    }
 }
 
 impl Config {

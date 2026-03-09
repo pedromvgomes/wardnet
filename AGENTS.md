@@ -321,10 +321,24 @@ async fn create_and_find_by_username() {
 - Run `cargo fmt && cargo clippy --all-targets` before committing Rust changes
 - Run `yarn format && yarn lint` before committing web UI changes
 
+## Pre-push checklist (MANDATORY)
+
+**You MUST run checks locally and fix ALL issues BEFORE every `git push`.** CI will reject the push otherwise. This is a hard gate — never push without passing checks.
+
+```bash
+# For Rust changes:
+cd source/daemon && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test --workspace
+
+# For web UI changes:
+cd source/web-ui && yarn format && yarn lint && yarn type-check
+
+# Or run everything at once:
+make check
+```
+
 ## Boundaries
 
 ### Always do
-- **Run `make check` (or the relevant `check-daemon` / `check-web` target) and fix ALL issues before pushing to remote.** This includes formatting (`cargo fmt`, `yarn format`), linting (`cargo clippy`, `yarn lint`), type checking (`yarn type-check`), and tests. CI will reject the push if any check fails — fix locally first.
 - Use parameterized `.bind()` queries for all SQL — never string-interpolate user input
 - Write tests for new functionality
 - Follow the layered architecture: handlers → services → repositories

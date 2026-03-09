@@ -17,7 +17,7 @@ fn credentials_variant_round_trip() {
             assert_eq!(username, "user@example.com");
             assert_eq!(password, "s3cret");
         }
-        _ => panic!("expected Credentials variant"),
+        ProviderCredentials::Token { .. } => panic!("expected Credentials variant"),
     }
 }
 
@@ -34,7 +34,7 @@ fn token_variant_round_trip() {
         ProviderCredentials::Token { token } => {
             assert_eq!(token, "abc123");
         }
-        _ => panic!("expected Token variant"),
+        ProviderCredentials::Credentials { .. } => panic!("expected Token variant"),
     }
 }
 

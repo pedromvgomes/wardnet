@@ -169,7 +169,7 @@ impl TunnelService for MockTunnelService {
 
 // -- Helpers ------------------------------------------------------------------
 
-/// Minimal valid WireGuard config for tunnel import.
+/// Minimal valid `WireGuard` config for tunnel import.
 fn dummy_wg_config() -> String {
     "[Interface]\n\
      PrivateKey = YNqHbfBQKaGvzefSSbufuZKjTIHQadqIyERi1V562lY=\n\

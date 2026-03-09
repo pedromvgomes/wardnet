@@ -15,7 +15,7 @@ pub enum ProviderAuthMethod {
 pub struct ProviderInfo {
     /// Unique machine identifier (e.g. "nordvpn").
     pub id: String,
-    /// Human-readable display name (e.g. "NordVPN").
+    /// Human-readable display name (e.g. `NordVPN`).
     pub name: String,
     /// Authentication methods this provider supports.
     pub auth_methods: Vec<ProviderAuthMethod>,

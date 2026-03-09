@@ -1,5 +1,6 @@
 mod bootstrap;
 mod config;
+mod device_detector;
 mod error;
 mod event;
 mod hostname_resolver;
@@ -12,4 +13,3 @@ mod tunnel_monitor;
 mod version;
 mod vpn_provider_nordvpn;
 mod vpn_provider_registry;
-mod device_detector;

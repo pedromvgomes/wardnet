@@ -56,7 +56,7 @@ impl NordVpnApi for MockNordVpnApi {
         let result = self.validate_result.lock().await;
         match result.as_ref() {
             Ok(v) => Ok(*v),
-            Err(e) => Err(anyhow::anyhow!("{}", e)),
+            Err(e) => Err(anyhow::anyhow!("{e}")),
         }
     }
 
@@ -77,17 +77,17 @@ impl NordVpnApi for MockNordVpnApi {
         let result = self.private_key_result.lock().await;
         match result.as_ref() {
             Ok(v) => Ok(v.clone()),
-            Err(e) => Err(anyhow::anyhow!("{}", e)),
+            Err(e) => Err(anyhow::anyhow!("{e}")),
         }
     }
 }
 
-/// Build a sample NordServer with WireGuard technology and public key metadata.
+/// Build a sample `NordServer` with `WireGuard` technology and public key metadata.
 fn sample_server(hostname: &str, load: u8, country_code: &str) -> NordServer {
     sample_server_with_city(hostname, load, country_code, None)
 }
 
-/// Build a sample NordServer with WireGuard technology, public key metadata, and optional city.
+/// Build a sample `NordServer` with `WireGuard` technology, public key metadata, and optional city.
 fn sample_server_with_city(
     hostname: &str,
     load: u8,
@@ -123,7 +123,7 @@ fn sample_server_with_city(
     }
 }
 
-/// Build a NordServer without WireGuard technology.
+/// Build a `NordServer` without `WireGuard` technology.
 fn server_without_wg(hostname: &str) -> NordServer {
     NordServer {
         id: 5678,
@@ -146,7 +146,7 @@ fn server_without_wg(hostname: &str) -> NordServer {
     }
 }
 
-/// Build a NordServer with WireGuard technology but no public key metadata.
+/// Build a `NordServer` with `WireGuard` technology but no public key metadata.
 fn server_wg_no_key(hostname: &str) -> NordServer {
     NordServer {
         id: 9999,
