@@ -1,5 +1,9 @@
 mod config;
+mod error;
 mod event;
 mod keys;
 mod oui;
+mod packet_capture;
+mod tunnel_idle;
+mod tunnel_monitor;
 mod version;
