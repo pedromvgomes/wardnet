@@ -23,6 +23,16 @@ pub trait VpnProvider: Send + Sync {
         filter: &ServerFilter,
     ) -> anyhow::Result<Vec<ServerInfo>>;
 
+    /// Resolve a server by hostname for dedicated IP or manual selection.
+    /// Returns `None` if the provider does not support hostname resolution.
+    async fn resolve_server(
+        &self,
+        _credentials: &ProviderCredentials,
+        _hostname: &str,
+    ) -> anyhow::Result<Option<ServerInfo>> {
+        Ok(None)
+    }
+
     /// Generate a `WireGuard` `.conf` string for connecting to the given server.
     ///
     /// The returned string is a complete `WireGuard` config that can be passed

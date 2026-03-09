@@ -26,6 +26,7 @@ struct MockVpnProvider {
     validate_result: Mutex<Result<bool, String>>,
     servers: Mutex<Vec<ServerInfo>>,
     config_result: Mutex<Result<String, String>>,
+    resolve_server_result: Mutex<Option<Result<Option<ServerInfo>, String>>>,
 }
 
 impl MockVpnProvider {
@@ -43,7 +44,17 @@ impl MockVpnProvider {
             validate_result: Mutex::new(Ok(true)),
             servers: Mutex::new(Vec::new()),
             config_result: Mutex::new(Ok(dummy_wg_config())),
+            resolve_server_result: Mutex::new(None),
         }
+    }
+
+    /// Set the result returned by `resolve_server`.
+    fn with_resolve_server_result(
+        self,
+        result: Option<Result<Option<ServerInfo>, String>>,
+    ) -> Self {
+        *self.resolve_server_result.lock().unwrap() = result;
+        self
     }
 
     /// Set the result returned by `validate_credentials`.
@@ -82,6 +93,19 @@ impl VpnProvider for MockVpnProvider {
         _filter: &ServerFilter,
     ) -> anyhow::Result<Vec<ServerInfo>> {
         Ok(self.servers.lock().unwrap().clone())
+    }
+
+    async fn resolve_server(
+        &self,
+        _credentials: &ProviderCredentials,
+        _hostname: &str,
+    ) -> anyhow::Result<Option<ServerInfo>> {
+        let guard = self.resolve_server_result.lock().unwrap();
+        match &*guard {
+            Some(Ok(server)) => Ok(server.clone()),
+            Some(Err(msg)) => Err(anyhow::anyhow!("{msg}")),
+            None => Ok(None),
+        }
     }
 
     async fn generate_config(
@@ -384,6 +408,7 @@ async fn setup_tunnel_happy_path() {
         country: "SE".to_owned(),
         label: None,
         server_id: None,
+        hostname: None,
     };
     let resp = h.svc.setup_tunnel("test", req).await.unwrap();
 
@@ -413,6 +438,7 @@ async fn setup_tunnel_with_specific_server_id() {
         country: "SE".to_owned(),
         label: None,
         server_id: Some("se-3".to_owned()),
+        hostname: None,
     };
     let resp = h.svc.setup_tunnel("test", req).await.unwrap();
 
@@ -432,6 +458,7 @@ async fn setup_tunnel_invalid_credentials() {
         country: "SE".to_owned(),
         label: None,
         server_id: None,
+        hostname: None,
     };
     let result = h.svc.setup_tunnel("test", req).await;
 
@@ -450,6 +477,7 @@ async fn setup_tunnel_no_servers_found() {
         country: "XX".to_owned(),
         label: None,
         server_id: None,
+        hostname: None,
     };
     let result = h.svc.setup_tunnel("test", req).await;
 
@@ -469,6 +497,7 @@ async fn setup_tunnel_server_id_not_found() {
         country: "SE".to_owned(),
         label: None,
         server_id: Some("nonexistent-server".to_owned()),
+        hostname: None,
     };
     let result = h.svc.setup_tunnel("test", req).await;
 
@@ -488,6 +517,7 @@ async fn setup_tunnel_with_custom_label() {
         country: "SE".to_owned(),
         label: Some("My Custom Tunnel".to_owned()),
         server_id: None,
+        hostname: None,
     };
     let resp = h.svc.setup_tunnel("test", req).await.unwrap();
 
@@ -495,4 +525,106 @@ async fn setup_tunnel_with_custom_label() {
 
     let imported = h.tunnel_service.imported.lock().unwrap();
     assert_eq!(imported[0].label, "My Custom Tunnel");
+}
+
+/// Helper to build a single resolved server for hostname tests.
+fn resolved_server() -> ServerInfo {
+    ServerInfo {
+        id: "dedicated-1".to_owned(),
+        name: "Portugal #131".to_owned(),
+        country_code: "PT".to_owned(),
+        city: Some("Lisbon".to_owned()),
+        hostname: "pt131.nordvpn.com".to_owned(),
+        load: 10,
+    }
+}
+
+#[tokio::test]
+async fn setup_tunnel_with_hostname_happy_path() {
+    let provider = MockVpnProvider::new("test", "Test VPN")
+        .with_resolve_server_result(Some(Ok(Some(resolved_server()))));
+    let h = build_harness_with_provider(provider);
+
+    let req = SetupProviderRequest {
+        credentials: sample_credentials(),
+        country: "PT".to_owned(),
+        label: None,
+        server_id: None,
+        hostname: Some("pt131.nordvpn.com".to_owned()),
+    };
+    let resp = h.svc.setup_tunnel("test", req).await.unwrap();
+
+    // Should use the resolved server, not list_servers.
+    assert_eq!(resp.server.hostname, "pt131.nordvpn.com");
+    assert_eq!(resp.server.country_code, "PT");
+    assert_eq!(resp.tunnel.country_code, "PT");
+    assert!(resp.tunnel.label.contains("Portugal #131"));
+
+    // Verify tunnel was imported.
+    let imported = h.tunnel_service.imported.lock().unwrap();
+    assert_eq!(imported.len(), 1);
+    assert_eq!(imported[0].country_code, "PT");
+}
+
+#[tokio::test]
+async fn setup_tunnel_with_hostname_not_found() {
+    let provider = MockVpnProvider::new("test", "Test VPN")
+        .with_resolve_server_result(Some(Err("server not found: bad.nordvpn.com".to_owned())));
+    let h = build_harness_with_provider(provider);
+
+    let req = SetupProviderRequest {
+        credentials: sample_credentials(),
+        country: "XX".to_owned(),
+        label: None,
+        server_id: None,
+        hostname: Some("bad.nordvpn.com".to_owned()),
+    };
+    let result = h.svc.setup_tunnel("test", req).await;
+
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), AppError::Internal(_)));
+}
+
+#[tokio::test]
+async fn setup_tunnel_with_hostname_unsupported_provider() {
+    // resolve_server returns Ok(None) — provider does not support hostname resolution.
+    let provider =
+        MockVpnProvider::new("test", "Test VPN").with_resolve_server_result(Some(Ok(None)));
+    let h = build_harness_with_provider(provider);
+
+    let req = SetupProviderRequest {
+        credentials: sample_credentials(),
+        country: "SE".to_owned(),
+        label: None,
+        server_id: None,
+        hostname: Some("pt131.nordvpn.com".to_owned()),
+    };
+    let result = h.svc.setup_tunnel("test", req).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, AppError::BadRequest(_)));
+    assert!(err.to_string().contains("does not support"));
+}
+
+#[tokio::test]
+async fn setup_tunnel_hostname_takes_precedence_over_server_id() {
+    let provider = MockVpnProvider::new("test", "Test VPN")
+        .with_servers(sample_servers())
+        .with_resolve_server_result(Some(Ok(Some(resolved_server()))));
+    let h = build_harness_with_provider(provider);
+
+    // Both hostname and server_id are set; hostname should win.
+    let req = SetupProviderRequest {
+        credentials: sample_credentials(),
+        country: "SE".to_owned(),
+        label: None,
+        server_id: Some("se-1".to_owned()),
+        hostname: Some("pt131.nordvpn.com".to_owned()),
+    };
+    let resp = h.svc.setup_tunnel("test", req).await.unwrap();
+
+    // The resolved server from hostname, not the server_id one.
+    assert_eq!(resp.server.hostname, "pt131.nordvpn.com");
+    assert_eq!(resp.server.country_code, "PT");
 }

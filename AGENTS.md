@@ -336,6 +336,9 @@ cd source/web-ui && yarn format && yarn lint && yarn type-check
 make check
 ```
 
+**Code coverage (MANDATORY for Rust changes):**
+Before starting work, compute the current coverage baseline by running `cargo tarpaulin --workspace` on `main` (or during planning). After implementation, run it again on your branch and verify coverage **does not decrease**. New code must have tests — coverage should stay the same or increase. It must never go down. Config: `source/daemon/tarpaulin.toml`.
+
 ## Boundaries
 
 ### Always do
