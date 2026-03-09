@@ -129,36 +129,50 @@ impl ProviderService for ProviderServiceImpl {
             ));
         }
 
-        // 2. Fetch servers filtered by country.
-        let filter = ServerFilter {
-            country: Some(request.country.clone()),
-            max_load: None,
-        };
-        let servers = provider
-            .list_servers(&request.credentials, &filter)
-            .await
-            .map_err(AppError::Internal)?;
-
-        if servers.is_empty() {
-            return Err(AppError::NotFound(format!(
-                "no servers found for country '{}'",
-                request.country
-            )));
-        }
-
-        // 3. Select server: specific ID or lowest load.
-        let server = if let Some(ref server_id) = request.server_id {
-            servers
-                .iter()
-                .find(|s| s.id == *server_id)
-                .cloned()
-                .ok_or_else(|| AppError::NotFound(format!("server '{server_id}' not found")))?
+        // 2. Resolve server: hostname path (dedicated IP) or list+select path.
+        let server = if let Some(ref hostname) = request.hostname {
+            // Dedicated IP / direct hostname path.
+            provider
+                .resolve_server(&request.credentials, hostname)
+                .await
+                .map_err(AppError::Internal)?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!(
+                        "provider '{}' does not support hostname-based server resolution",
+                        info.id
+                    ))
+                })?
         } else {
-            servers
-                .iter()
-                .min_by_key(|s| s.load)
-                .cloned()
-                .expect("servers is non-empty")
+            // Standard flow: list servers filtered by country, then select.
+            let filter = ServerFilter {
+                country: Some(request.country.clone()),
+                max_load: None,
+            };
+            let servers = provider
+                .list_servers(&request.credentials, &filter)
+                .await
+                .map_err(AppError::Internal)?;
+
+            if servers.is_empty() {
+                return Err(AppError::NotFound(format!(
+                    "no servers found for country '{}'",
+                    request.country
+                )));
+            }
+
+            if let Some(ref server_id) = request.server_id {
+                servers
+                    .iter()
+                    .find(|s| s.id == *server_id)
+                    .cloned()
+                    .ok_or_else(|| AppError::NotFound(format!("server '{server_id}' not found")))?
+            } else {
+                servers
+                    .iter()
+                    .min_by_key(|s| s.load)
+                    .cloned()
+                    .expect("servers is non-empty")
+            }
         };
 
         // 4. Generate WireGuard configuration.

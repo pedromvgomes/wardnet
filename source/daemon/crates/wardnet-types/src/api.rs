@@ -190,6 +190,12 @@ pub struct SetupProviderRequest {
     /// If set, use this specific server ID instead of auto-selecting.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_id: Option<String>,
+    /// Direct server hostname for dedicated IP or manual server selection.
+    /// Bypasses server listing -- resolves directly by hostname.
+    /// Accepts short form (`pt131`) or full (`pt131.nordvpn.com`).
+    /// Takes precedence over `server_id` when both are set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
 }
 
 /// Response for POST /api/providers/:id/setup.

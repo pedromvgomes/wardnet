@@ -17,7 +17,10 @@ struct MockNordVpnApi {
     validate_result: Mutex<Result<bool, String>>,
     countries: Mutex<Vec<NordCountryInfo>>,
     servers: Mutex<Vec<NordServer>>,
+    server_by_hostname: Mutex<Option<NordServer>>,
     private_key_result: Mutex<Result<String, String>>,
+    /// Records the hostname passed to `get_server_by_hostname`.
+    last_hostname_query: Mutex<Option<String>>,
 }
 
 impl MockNordVpnApi {
@@ -42,7 +45,9 @@ impl MockNordVpnApi {
                 },
             ]),
             servers: Mutex::new(Vec::new()),
+            server_by_hostname: Mutex::new(None),
             private_key_result: Mutex::new(Ok("test-private-key".to_string())),
+            last_hostname_query: Mutex::new(None),
         }
     }
 }
@@ -58,6 +63,14 @@ impl NordVpnApi for MockNordVpnApi {
             Ok(v) => Ok(*v),
             Err(e) => Err(anyhow::anyhow!("{e}")),
         }
+    }
+
+    async fn get_server_by_hostname(&self, hostname: &str) -> anyhow::Result<NordServer> {
+        *self.last_hostname_query.lock().await = Some(hostname.to_string());
+        let guard = self.server_by_hostname.lock().await;
+        guard
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("server not found: {hostname}"))
     }
 
     async fn list_countries(&self) -> anyhow::Result<Vec<NordCountryInfo>> {
@@ -298,7 +311,7 @@ async fn list_servers_handles_empty() {
 #[tokio::test]
 async fn generate_config_produces_valid_wireguard() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await = vec![sample_server("se142.nordvpn.com", 25, "SE")];
+    *mock.server_by_hostname.lock().await = Some(sample_server("se142.nordvpn.com", 25, "SE"));
     *mock.private_key_result.lock().await = Ok("YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=".to_string());
     let provider = NordVpnProvider::new(Arc::new(mock));
 
@@ -337,7 +350,7 @@ async fn generate_config_produces_valid_wireguard() {
 #[tokio::test]
 async fn generate_config_no_wireguard_tech() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await = vec![server_without_wg("nowg.nordvpn.com")];
+    *mock.server_by_hostname.lock().await = Some(server_without_wg("nowg.nordvpn.com"));
     let provider = NordVpnProvider::new(Arc::new(mock));
 
     let server_info = ServerInfo {
@@ -360,7 +373,7 @@ async fn generate_config_no_wireguard_tech() {
 #[tokio::test]
 async fn generate_config_no_public_key() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await = vec![server_wg_no_key("nokey.nordvpn.com")];
+    *mock.server_by_hostname.lock().await = Some(server_wg_no_key("nokey.nordvpn.com"));
     let provider = NordVpnProvider::new(Arc::new(mock));
 
     let server_info = ServerInfo {
@@ -383,7 +396,7 @@ async fn generate_config_no_public_key() {
 #[tokio::test]
 async fn generate_config_api_key_error() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await = vec![sample_server("se142.nordvpn.com", 25, "SE")];
+    *mock.server_by_hostname.lock().await = Some(sample_server("se142.nordvpn.com", 25, "SE"));
     *mock.private_key_result.lock().await = Err("API key retrieval failed".to_string());
     let provider = NordVpnProvider::new(Arc::new(mock));
 
@@ -411,8 +424,7 @@ async fn generate_config_api_key_error() {
 #[tokio::test]
 async fn generate_config_server_not_found() {
     let mock = MockNordVpnApi::new();
-    // Servers list does not contain the requested hostname
-    *mock.servers.lock().await = vec![sample_server("other.nordvpn.com", 25, "SE")];
+    // server_by_hostname is None by default, so get_server_by_hostname will error.
     let provider = NordVpnProvider::new(Arc::new(mock));
 
     let server_info = ServerInfo {
@@ -516,7 +528,7 @@ async fn list_servers_with_unknown_country_code_passes_none() {
 #[tokio::test]
 async fn generate_config_rejects_credentials_auth_via_api() {
     let mock = MockNordVpnApi::new();
-    *mock.servers.lock().await = vec![sample_server("se142.nordvpn.com", 25, "SE")];
+    *mock.server_by_hostname.lock().await = Some(sample_server("se142.nordvpn.com", 25, "SE"));
     // Simulate the real API behavior: Credentials auth returns an error for WireGuard key generation.
     *mock.private_key_result.lock().await =
         Err("NordVPN requires token authentication for WireGuard key generation".to_string());
@@ -600,4 +612,106 @@ async fn list_servers_server_without_locations_has_empty_country_code() {
     assert_eq!(servers.len(), 1);
     assert_eq!(servers[0].country_code, "");
     assert!(servers[0].city.is_none());
+}
+
+#[tokio::test]
+async fn get_server_by_hostname_returns_server() {
+    let mock = MockNordVpnApi::new();
+    let nord_server = sample_server_with_city("pt131.nordvpn.com", 15, "PT", Some("Lisbon"));
+    *mock.server_by_hostname.lock().await = Some(nord_server);
+    let mock = Arc::new(mock);
+    let provider = NordVpnProvider::new(mock);
+
+    let result = provider
+        .resolve_server(&token_credentials(), "pt131.nordvpn.com")
+        .await
+        .unwrap();
+
+    let server = result.expect("should return Some");
+    assert_eq!(server.hostname, "pt131.nordvpn.com");
+    assert_eq!(server.country_code, "PT");
+    assert_eq!(server.city.as_deref(), Some("Lisbon"));
+    assert_eq!(server.load, 15);
+}
+
+#[tokio::test]
+async fn resolve_server_normalizes_short_hostname() {
+    let mock = MockNordVpnApi::new();
+    *mock.server_by_hostname.lock().await = Some(sample_server("pt131.nordvpn.com", 15, "PT"));
+    let mock = Arc::new(mock);
+    let provider = NordVpnProvider::new(Arc::clone(&mock) as Arc<dyn NordVpnApi>);
+
+    let _result = provider
+        .resolve_server(&token_credentials(), "pt131")
+        .await
+        .unwrap();
+
+    // Verify the API was queried with the full hostname.
+    let queried = mock.last_hostname_query.lock().await;
+    assert_eq!(queried.as_deref(), Some("pt131.nordvpn.com"));
+}
+
+#[tokio::test]
+async fn resolve_server_full_hostname() {
+    let mock = MockNordVpnApi::new();
+    *mock.server_by_hostname.lock().await = Some(sample_server("pt131.nordvpn.com", 15, "PT"));
+    let mock = Arc::new(mock);
+    let provider = NordVpnProvider::new(Arc::clone(&mock) as Arc<dyn NordVpnApi>);
+
+    let result = provider
+        .resolve_server(&token_credentials(), "pt131.nordvpn.com")
+        .await
+        .unwrap();
+
+    assert!(result.is_some());
+
+    // Verify the API was queried with the exact hostname (no modification).
+    let queried = mock.last_hostname_query.lock().await;
+    assert_eq!(queried.as_deref(), Some("pt131.nordvpn.com"));
+}
+
+#[tokio::test]
+async fn resolve_server_not_found() {
+    let mock = MockNordVpnApi::new();
+    // server_by_hostname is None, so get_server_by_hostname returns an error.
+    let provider = NordVpnProvider::new(Arc::new(mock));
+
+    let result = provider
+        .resolve_server(&token_credentials(), "nonexistent.nordvpn.com")
+        .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("not found"), "got: {err}");
+}
+
+#[tokio::test]
+async fn generate_config_uses_direct_hostname_lookup() {
+    let mock = MockNordVpnApi::new();
+    *mock.server_by_hostname.lock().await = Some(sample_server("se142.nordvpn.com", 25, "SE"));
+    *mock.private_key_result.lock().await = Ok("YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=".to_string());
+    let mock = Arc::new(mock);
+    let provider = NordVpnProvider::new(Arc::clone(&mock) as Arc<dyn NordVpnApi>);
+
+    let server_info = ServerInfo {
+        id: "1234".to_string(),
+        name: "SE #se142".to_string(),
+        country_code: "SE".to_string(),
+        city: None,
+        hostname: "se142.nordvpn.com".to_string(),
+        load: 25,
+    };
+
+    let config_str = provider
+        .generate_config(&token_credentials(), &server_info)
+        .await
+        .unwrap();
+
+    // Verify the hostname query was made (direct lookup, not list_servers).
+    let queried = mock.last_hostname_query.lock().await;
+    assert_eq!(queried.as_deref(), Some("se142.nordvpn.com"));
+
+    // Verify config is valid.
+    let parsed = wardnet_types::wireguard_config::parse(&config_str).unwrap();
+    assert_eq!(parsed.peers[0].public_key, "dGVzdC1wdWJsaWMta2V5");
 }
