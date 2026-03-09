@@ -38,3 +38,67 @@ fn defaults_when_file_missing() {
     assert_eq!(config.otel.endpoint, "http://localhost:4317");
     assert_eq!(config.otel.service_name, "wardnetd");
 }
+
+#[test]
+fn load_from_toml_file() {
+    let dir = std::env::temp_dir().join("wardnet-config-test");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("wardnet-test.toml");
+    std::fs::write(
+        &path,
+        r#"
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[providers.enabled]
+nordvpn = false
+"#,
+    )
+    .unwrap();
+
+    let config = Config::load(&path).unwrap();
+    assert_eq!(config.server.host, "127.0.0.1");
+    assert_eq!(config.server.port, 8080);
+    assert!(!config.is_provider_enabled("nordvpn"));
+
+    // Clean up.
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn is_provider_enabled_default_true() {
+    let config = Config::default();
+    // Providers not in the map should default to enabled.
+    assert!(config.is_provider_enabled("nordvpn"));
+    assert!(config.is_provider_enabled("unknown_provider"));
+}
+
+#[test]
+fn is_provider_enabled_explicit_false() {
+    let mut config = Config::default();
+    config.providers.enabled.insert("nordvpn".to_owned(), false);
+    assert!(!config.is_provider_enabled("nordvpn"));
+}
+
+#[test]
+fn is_provider_enabled_explicit_true() {
+    let mut config = Config::default();
+    config.providers.enabled.insert("nordvpn".to_owned(), true);
+    assert!(config.is_provider_enabled("nordvpn"));
+}
+
+#[test]
+fn to_filter_string_with_overrides() {
+    let mut config = Config::default();
+    config.logging.level = "debug".to_owned();
+    config
+        .logging
+        .filters
+        .insert("sqlx".to_owned(), "trace".to_owned());
+
+    let filter = config.logging.to_filter_string();
+    assert!(filter.contains("wardnetd=debug"));
+    assert!(filter.contains("wardnet_types=debug"));
+    assert!(filter.contains("sqlx=trace"));
+}
