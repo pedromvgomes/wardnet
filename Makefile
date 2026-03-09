@@ -50,6 +50,7 @@ build-web:
 	cd $(WEBUI_DIR) && yarn install --immutable && yarn build
 
 check-web:
+	cd $(WEBUI_DIR) && yarn install --immutable
 	cd $(WEBUI_DIR) && yarn type-check
 	cd $(WEBUI_DIR) && yarn lint
 	cd $(WEBUI_DIR) && yarn format:check
