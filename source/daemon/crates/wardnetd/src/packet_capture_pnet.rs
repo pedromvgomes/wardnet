@@ -19,7 +19,7 @@ use crate::packet_capture::{ObservedDevice, PacketCapture, PacketSource};
 pub struct PnetCapture;
 
 /// Find a network interface by name.
-fn find_interface(name: &str) -> anyhow::Result<NetworkInterface> {
+pub(crate) fn find_interface(name: &str) -> anyhow::Result<NetworkInterface> {
     datalink::interfaces()
         .into_iter()
         .find(|iface| iface.name == name)
@@ -27,7 +27,7 @@ fn find_interface(name: &str) -> anyhow::Result<NetworkInterface> {
 }
 
 /// Format a `pnet` `MacAddr` as uppercase colon-separated "AA:BB:CC:DD:EE:FF".
-fn format_mac(mac: MacAddr) -> String {
+pub(crate) fn format_mac(mac: MacAddr) -> String {
     format!(
         "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
         mac.0, mac.1, mac.2, mac.3, mac.4, mac.5
@@ -35,7 +35,7 @@ fn format_mac(mac: MacAddr) -> String {
 }
 
 /// Check whether a MAC address should be filtered out.
-fn should_filter_mac(mac: MacAddr, own_mac: MacAddr) -> bool {
+pub(crate) fn should_filter_mac(mac: MacAddr, own_mac: MacAddr) -> bool {
     // Own MAC
     if mac == own_mac {
         return true;
@@ -52,7 +52,7 @@ fn should_filter_mac(mac: MacAddr, own_mac: MacAddr) -> bool {
 }
 
 /// Parse an Ethernet frame into an `ObservedDevice`, if applicable.
-fn parse_frame(data: &[u8], own_mac: MacAddr) -> Option<ObservedDevice> {
+pub(crate) fn parse_frame(data: &[u8], own_mac: MacAddr) -> Option<ObservedDevice> {
     let eth = EthernetPacket::new(data)?;
 
     match eth.get_ethertype() {
@@ -102,7 +102,11 @@ fn parse_frame(data: &[u8], own_mac: MacAddr) -> Option<ObservedDevice> {
 /// Build an ARP request Ethernet frame.
 ///
 /// Returns a `Vec<u8>` containing the complete Ethernet frame.
-fn build_arp_request(src_mac: MacAddr, src_ip: Ipv4Addr, target_ip: Ipv4Addr) -> Option<Vec<u8>> {
+pub(crate) fn build_arp_request(
+    src_mac: MacAddr,
+    src_ip: Ipv4Addr,
+    target_ip: Ipv4Addr,
+) -> Option<Vec<u8>> {
     // Ethernet header (14) + ARP payload (28) = 42 bytes
     let mut buf = vec![0u8; 42];
 
@@ -132,7 +136,7 @@ fn build_arp_request(src_mac: MacAddr, src_ip: Ipv4Addr, target_ip: Ipv4Addr) ->
 /// Compute all host IPs in a subnet given an address and netmask.
 ///
 /// Excludes network and broadcast addresses.
-fn subnet_hosts(ip: Ipv4Addr, mask: Ipv4Addr) -> Vec<Ipv4Addr> {
+pub(crate) fn subnet_hosts(ip: Ipv4Addr, mask: Ipv4Addr) -> Vec<Ipv4Addr> {
     let ip_u32 = u32::from(ip);
     let mask_u32 = u32::from(mask);
     let network = ip_u32 & mask_u32;
