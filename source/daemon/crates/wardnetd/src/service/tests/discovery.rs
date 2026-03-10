@@ -8,6 +8,9 @@ use wardnet_types::device::{Device, DeviceType};
 use wardnet_types::event::WardnetEvent;
 use wardnet_types::routing::RoutingRule;
 
+use wardnet_types::auth::AuthContext;
+
+use crate::auth_context;
 use crate::error::AppError;
 use crate::event::EventPublisher;
 use crate::hostname_resolver::HostnameResolver;
@@ -16,6 +19,20 @@ use crate::repository::DeviceRepository;
 use crate::repository::device::DeviceRow;
 use crate::service::DeviceDiscoveryService;
 use crate::service::discovery::{DeviceDiscoveryServiceImpl, ObservationResult};
+
+/// Helper to create an admin auth context for tests.
+fn admin_ctx() -> AuthContext {
+    AuthContext::Admin {
+        admin_id: Uuid::new_v4(),
+    }
+}
+
+/// Helper to create a device auth context for tests.
+fn device_ctx(mac: &str) -> AuthContext {
+    AuthContext::Device {
+        mac: mac.to_owned(),
+    }
+}
 
 // -- Mock DeviceRepository ------------------------------------------------
 
@@ -459,7 +476,7 @@ async fn scan_departures_ignores_recent() {
 }
 
 #[tokio::test]
-async fn get_all_devices_delegates() {
+async fn get_all_devices_as_admin() {
     let device = sample_device(
         "00000000-0000-0000-0000-000000000001",
         "AA:BB:CC:DD:EE:01",
@@ -467,21 +484,63 @@ async fn get_all_devices_delegates() {
     );
     let h = build_harness_with_devices(vec![device]);
 
-    let devices = h.svc.get_all_devices().await.unwrap();
+    let devices = auth_context::with_context(admin_ctx(), h.svc.get_all_devices()).await.unwrap();
     assert_eq!(devices.len(), 1);
     assert_eq!(devices[0].mac, "AA:BB:CC:DD:EE:01");
 }
 
 #[tokio::test]
+async fn get_all_devices_as_device_returns_own_only() {
+    let device1 = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let device2 = sample_device(
+        "00000000-0000-0000-0000-000000000002",
+        "AA:BB:CC:DD:EE:02",
+        "192.168.1.11",
+    );
+    let h = build_harness_with_devices(vec![device1, device2]);
+
+    let devices = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:01"),
+        h.svc.get_all_devices(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].mac, "AA:BB:CC:DD:EE:01");
+}
+
+#[tokio::test]
+async fn get_all_devices_anonymous_forbidden() {
+    let h = build_harness();
+    let result = auth_context::with_context(AuthContext::Anonymous, h.svc.get_all_devices()).await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
 async fn get_device_by_id_not_found() {
     let h = build_harness();
-    let result = h.svc.get_device_by_id(Uuid::new_v4()).await;
+    let result = auth_context::with_context(admin_ctx(), h.svc.get_device_by_id(Uuid::new_v4())).await;
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
 }
 
 #[tokio::test]
-async fn update_device_sets_name_and_type() {
+async fn get_device_by_id_anonymous_forbidden() {
+    let h = build_harness();
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        h.svc.get_device_by_id(Uuid::new_v4()),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
+async fn get_device_by_id_device_can_view_own() {
     let device = sample_device(
         "00000000-0000-0000-0000-000000000001",
         "AA:BB:CC:DD:EE:01",
@@ -490,11 +549,49 @@ async fn update_device_sets_name_and_type() {
     let id = device.id;
     let h = build_harness_with_devices(vec![device]);
 
-    let result = h
-        .svc
-        .update_device(id, Some("Living Room TV"), Some(DeviceType::Tv))
-        .await
-        .unwrap();
+    let result = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:01"),
+        h.svc.get_device_by_id(id),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().mac, "AA:BB:CC:DD:EE:01");
+}
+
+#[tokio::test]
+async fn get_device_by_id_device_cannot_view_other() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:99"),
+        h.svc.get_device_by_id(id),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
+async fn update_device_sets_name_and_type_as_admin() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        admin_ctx(),
+        h.svc.update_device(id, Some("Living Room TV"), Some(DeviceType::Tv)),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(result.name, Some("Living Room TV".to_owned()));
     assert_eq!(result.device_type, DeviceType::Tv);
@@ -503,6 +600,80 @@ async fn update_device_sets_name_and_type() {
     let recorded = h.repo.name_type_updates.lock().unwrap();
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].1, Some("Living Room TV".to_owned()));
+}
+
+#[tokio::test]
+async fn update_device_anonymous_forbidden() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        h.svc.update_device(id, Some("name"), None),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
+async fn update_device_as_device_own_allowed() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:01"),
+        h.svc.update_device(id, Some("My Phone"), None),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, Some("My Phone".to_owned()));
+}
+
+#[tokio::test]
+async fn update_device_as_device_other_forbidden() {
+    let device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:99"),
+        h.svc.update_device(id, Some("name"), None),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
+async fn update_device_as_device_admin_locked_forbidden() {
+    let mut device = sample_device(
+        "00000000-0000-0000-0000-000000000001",
+        "AA:BB:CC:DD:EE:01",
+        "192.168.1.10",
+    );
+    device.admin_locked = true;
+    let id = device.id;
+    let h = build_harness_with_devices(vec![device]);
+
+    let result = auth_context::with_context(
+        device_ctx("AA:BB:CC:DD:EE:01"),
+        h.svc.update_device(id, Some("name"), None),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
 #[tokio::test]
@@ -594,11 +765,12 @@ async fn update_device_without_device_type_preserves_existing() {
     let h = build_harness_with_devices(vec![device]);
 
     // Update only name, leaving device_type as None.
-    let result = h
-        .svc
-        .update_device(id, Some("Kitchen Tablet"), None)
-        .await
-        .unwrap();
+    let result = auth_context::with_context(
+        admin_ctx(),
+        h.svc.update_device(id, Some("Kitchen Tablet"), None),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(result.name, Some("Kitchen Tablet".to_owned()));
     // Device type should be preserved from the original.
@@ -608,10 +780,11 @@ async fn update_device_without_device_type_preserves_existing() {
 #[tokio::test]
 async fn update_device_not_found() {
     let h = build_harness();
-    let result = h
-        .svc
-        .update_device(Uuid::new_v4(), Some("name"), None)
-        .await;
+    let result = auth_context::with_context(
+        admin_ctx(),
+        h.svc.update_device(Uuid::new_v4(), Some("name"), None),
+    )
+    .await;
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
 }
@@ -626,7 +799,7 @@ async fn get_device_by_id_success() {
     let id = device.id;
     let h = build_harness_with_devices(vec![device]);
 
-    let result = h.svc.get_device_by_id(id).await.unwrap();
+    let result = auth_context::with_context(admin_ctx(), h.svc.get_device_by_id(id)).await.unwrap();
     assert_eq!(result.id, id);
     assert_eq!(result.mac, "AA:BB:CC:DD:EE:01");
 }

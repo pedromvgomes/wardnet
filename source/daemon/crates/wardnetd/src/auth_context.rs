@@ -39,6 +39,34 @@ pub async fn with_context<F: Future>(ctx: AuthContext, f: F) -> F::Output {
     AUTH_CONTEXT.scope(ctx, f).await
 }
 
+/// Require that the current caller is an admin.
+///
+/// Returns `Ok(())` if the task-local [`AuthContext`] is [`AuthContext::Admin`],
+/// otherwise returns `Err(AppError::Forbidden)`.
+pub fn require_admin() -> Result<(), crate::error::AppError> {
+    let ctx = try_current().unwrap_or(AuthContext::Anonymous);
+    if !ctx.is_admin() {
+        return Err(crate::error::AppError::Forbidden(
+            "admin privileges required".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Require that the current caller is authenticated (admin or device).
+///
+/// Returns `Ok(())` if authenticated, `Err(AppError::Forbidden)` if anonymous
+/// or no context is set.
+pub fn require_authenticated() -> Result<(), crate::error::AppError> {
+    let ctx = try_current().unwrap_or(AuthContext::Anonymous);
+    if matches!(ctx, AuthContext::Anonymous) {
+        return Err(crate::error::AppError::Forbidden(
+            "authentication required".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 // -- Tower Layer / Service --------------------------------------------------
 
 /// Tower layer that wraps each request future in an [`AuthContext`] scope.
