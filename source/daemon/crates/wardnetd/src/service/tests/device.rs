@@ -286,6 +286,47 @@ async fn set_rule_by_id_device_context_foreign_device_forbidden() {
     assert!(result.is_err());
 }
 
+#[tokio::test]
+async fn set_rule_by_id_admin_locked_own_device_forbidden() {
+    let svc = make_svc(true, None);
+    let ctx = device_ctx("AA:BB:CC:DD:EE:01");
+    let device_id = "00000000-0000-0000-0000-000000000001";
+
+    let result = auth_context::with_context(ctx, async {
+        svc.set_rule(device_id, RoutingTarget::Default).await
+    })
+    .await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn set_rule_by_id_anonymous_forbidden() {
+    let svc = make_svc(false, None);
+    let device_id = "00000000-0000-0000-0000-000000000001";
+
+    let result = auth_context::with_context(AuthContext::Anonymous, async {
+        svc.set_rule(device_id, RoutingTarget::Default).await
+    })
+    .await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn set_rule_by_id_device_not_found() {
+    let svc = make_svc_no_device();
+    let ctx = admin_ctx();
+    let device_id = "00000000-0000-0000-0000-000000000099";
+
+    let result = auth_context::with_context(ctx, async {
+        svc.set_rule(device_id, RoutingTarget::Default).await
+    })
+    .await;
+
+    assert!(result.is_err());
+}
+
 // -- Tests: update_admin_locked ------------------------------------------
 
 #[tokio::test]
