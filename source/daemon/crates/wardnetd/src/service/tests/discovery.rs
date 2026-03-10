@@ -160,6 +160,14 @@ impl DeviceRepository for MockDeviceRepo {
         Ok(())
     }
 
+    async fn update_admin_locked(&self, id: &str, locked: bool) -> anyhow::Result<()> {
+        let mut devices = self.devices.lock().unwrap();
+        if let Some(d) = devices.iter_mut().find(|d| d.id.to_string() == id) {
+            d.admin_locked = locked;
+        }
+        Ok(())
+    }
+
     async fn count(&self) -> anyhow::Result<i64> {
         Ok(i64::try_from(self.devices.lock().unwrap().len()).unwrap_or(0))
     }

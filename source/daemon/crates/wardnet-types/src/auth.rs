@@ -10,6 +10,46 @@ pub enum Role {
     Public,
 }
 
+/// Identity and authorization context for the current request.
+///
+/// Set by API middleware and made available to services via
+/// `tokio::task_local!`. Admin endpoints populate [`Admin`](Self::Admin),
+/// unauthenticated self-service endpoints populate [`Device`](Self::Device)
+/// with the caller's MAC address, and requests with no identified caller
+/// use [`Anonymous`](Self::Anonymous).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthContext {
+    /// Authenticated admin user.
+    Admin {
+        /// The UUID of the authenticated admin account.
+        admin_id: Uuid,
+    },
+    /// Self-service caller identified by their device MAC address.
+    Device {
+        /// The MAC address of the caller's device.
+        mac: String,
+    },
+    /// No identity resolved (e.g. unknown IP, public info endpoints).
+    Anonymous,
+}
+
+impl AuthContext {
+    /// Returns `true` if the context represents an admin.
+    #[must_use]
+    pub fn is_admin(&self) -> bool {
+        matches!(self, Self::Admin { .. })
+    }
+
+    /// Returns the device MAC if this is a [`Device`](Self::Device) context.
+    #[must_use]
+    pub fn device_mac(&self) -> Option<&str> {
+        match self {
+            Self::Device { mac } => Some(mac),
+            _ => None,
+        }
+    }
+}
+
 /// An authenticated admin session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
