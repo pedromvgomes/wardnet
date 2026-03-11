@@ -540,6 +540,45 @@ async fn get_tunnel_anonymous_forbidden() {
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
+/// `bring_up_internal` bypasses auth, used by the routing engine for on-demand tunnel startup.
+#[tokio::test]
+async fn bring_up_internal_succeeds_without_admin_context() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    // Call bring_up_internal without admin context — should still succeed.
+    h.svc.bring_up_internal(id).await.unwrap();
+
+    let created = h.tunnel_iface.created.lock().unwrap();
+    assert_eq!(created.len(), 1, "interface should be created");
+}
+
+/// `tear_down_internal` bypasses auth, used by the idle tunnel watcher.
+#[tokio::test]
+async fn tear_down_internal_succeeds_without_admin_context() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    // Bring up first so we can tear down.
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+
+    // Call tear_down_internal without admin context — should still succeed.
+    h.svc.tear_down_internal(id, "idle timeout").await.unwrap();
+
+    let torn_down = h.tunnel_iface.torn_down.lock().unwrap();
+    assert_eq!(torn_down.len(), 1, "interface should be torn down");
+    let removed = h.tunnel_iface.removed.lock().unwrap();
+    assert_eq!(removed.len(), 1, "interface should be removed");
+}
+
 #[tokio::test]
 async fn bring_up_already_up_is_noop() {
     let h = build_harness();

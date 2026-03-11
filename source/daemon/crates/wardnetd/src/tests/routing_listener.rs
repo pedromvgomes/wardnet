@@ -257,6 +257,136 @@ fn make_device(id: Uuid, ip: &str) -> Device {
 }
 
 // ---------------------------------------------------------------------------
+// Failing Mock Services (for error branch coverage)
+// ---------------------------------------------------------------------------
+
+/// A routing service mock that returns errors for specific methods.
+struct FailingRoutingService;
+
+#[async_trait]
+#[allow(clippy::similar_names)]
+impl RoutingService for FailingRoutingService {
+    async fn apply_rule(
+        &self,
+        _device_id: Uuid,
+        _device_ip: &str,
+        _target: &RoutingTarget,
+    ) -> Result<(), AppError> {
+        Err(AppError::Internal(anyhow::anyhow!("apply rule failed")))
+    }
+
+    async fn remove_device_routes(
+        &self,
+        _device_id: Uuid,
+        _device_ip: &str,
+    ) -> Result<(), AppError> {
+        Err(AppError::Internal(anyhow::anyhow!("remove routes failed")))
+    }
+
+    async fn handle_ip_change(
+        &self,
+        _device_id: Uuid,
+        _old_ip: &str,
+        _new_ip: &str,
+    ) -> Result<(), AppError> {
+        Err(AppError::Internal(anyhow::anyhow!("ip change failed")))
+    }
+
+    async fn handle_tunnel_down(&self, _tunnel_id: Uuid) -> Result<(), AppError> {
+        Err(AppError::Internal(anyhow::anyhow!("tunnel down failed")))
+    }
+
+    async fn handle_tunnel_up(&self, _tunnel_id: Uuid) -> Result<(), AppError> {
+        Err(AppError::Internal(anyhow::anyhow!("tunnel up failed")))
+    }
+
+    async fn reconcile(&self) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn devices_using_tunnel(&self, _tunnel_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+        Ok(Vec::new())
+    }
+}
+
+/// A device repository that always returns errors.
+struct FailingDeviceRepo;
+
+#[async_trait]
+impl DeviceRepository for FailingDeviceRepo {
+    async fn find_by_ip(&self, _ip: &str) -> anyhow::Result<Option<Device>> {
+        anyhow::bail!("find_by_ip failed")
+    }
+
+    async fn find_by_id(&self, _id: &str) -> anyhow::Result<Option<Device>> {
+        anyhow::bail!("find_by_id failed")
+    }
+
+    async fn find_by_mac(&self, _mac: &str) -> anyhow::Result<Option<Device>> {
+        anyhow::bail!("find_by_mac failed")
+    }
+
+    async fn find_all(&self) -> anyhow::Result<Vec<Device>> {
+        anyhow::bail!("find_all failed")
+    }
+
+    async fn insert(&self, _device: &DeviceRow) -> anyhow::Result<()> {
+        anyhow::bail!("insert failed")
+    }
+
+    async fn update_last_seen_and_ip(
+        &self,
+        _id: &str,
+        _ip: &str,
+        _last_seen: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("update failed")
+    }
+
+    async fn update_last_seen_batch(&self, _updates: &[(String, String)]) -> anyhow::Result<()> {
+        anyhow::bail!("update batch failed")
+    }
+
+    async fn update_hostname(&self, _id: &str, _hostname: &str) -> anyhow::Result<()> {
+        anyhow::bail!("update hostname failed")
+    }
+
+    async fn update_name_and_type(
+        &self,
+        _id: &str,
+        _name: Option<&str>,
+        _device_type: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("update name_and_type failed")
+    }
+
+    async fn find_stale(&self, _before: &str) -> anyhow::Result<Vec<Device>> {
+        anyhow::bail!("find_stale failed")
+    }
+
+    async fn find_rule_for_device(&self, _device_id: &str) -> anyhow::Result<Option<RoutingRule>> {
+        anyhow::bail!("find_rule failed")
+    }
+
+    async fn upsert_user_rule(
+        &self,
+        _device_id: &str,
+        _target_json: &str,
+        _now: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("upsert rule failed")
+    }
+
+    async fn update_admin_locked(&self, _id: &str, _locked: bool) -> anyhow::Result<()> {
+        anyhow::bail!("update admin locked failed")
+    }
+
+    async fn count(&self) -> anyhow::Result<i64> {
+        anyhow::bail!("count failed")
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -537,5 +667,216 @@ async fn unrelated_events_are_ignored() {
     assert!(
         calls.is_empty(),
         "stats event should not trigger any routing call"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error branch tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn routing_service_error_does_not_panic_on_ip_change() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing: Arc<dyn RoutingService> = Arc::new(FailingRoutingService);
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing, devices, &parent);
+
+    bus.publish(WardnetEvent::DeviceIpChanged {
+        device_id: Uuid::new_v4(),
+        mac: "AA:BB:CC:DD:EE:01".to_owned(),
+        old_ip: "192.168.1.10".to_owned(),
+        new_ip: "192.168.1.20".to_owned(),
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+    // Error is logged but no panic.
+}
+
+#[tokio::test]
+async fn routing_service_error_does_not_panic_on_device_gone() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing: Arc<dyn RoutingService> = Arc::new(FailingRoutingService);
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing, devices, &parent);
+
+    bus.publish(WardnetEvent::DeviceGone {
+        device_id: Uuid::new_v4(),
+        mac: "AA:BB:CC:DD:EE:01".to_owned(),
+        last_ip: "192.168.1.10".to_owned(),
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+    // Error is logged but no panic.
+}
+
+#[tokio::test]
+async fn routing_service_error_does_not_panic_on_tunnel_up() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing: Arc<dyn RoutingService> = Arc::new(FailingRoutingService);
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing, devices, &parent);
+
+    bus.publish(WardnetEvent::TunnelUp {
+        tunnel_id: Uuid::new_v4(),
+        interface_name: "wg_ward0".to_owned(),
+        endpoint: "198.51.100.1:51820".to_owned(),
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+    // Error is logged but no panic.
+}
+
+#[tokio::test]
+async fn routing_service_error_does_not_panic_on_tunnel_down() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing: Arc<dyn RoutingService> = Arc::new(FailingRoutingService);
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing, devices, &parent);
+
+    bus.publish(WardnetEvent::TunnelDown {
+        tunnel_id: Uuid::new_v4(),
+        interface_name: "wg_ward0".to_owned(),
+        reason: "test".to_owned(),
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+    // Error is logged but no panic.
+}
+
+#[tokio::test]
+async fn device_repo_error_does_not_panic_on_routing_rule_change() {
+    let device_id = Uuid::new_v4();
+    let tunnel_id = Uuid::new_v4();
+
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing = Arc::new(MockRoutingService::new());
+    let devices: Arc<dyn DeviceRepository> = Arc::new(FailingDeviceRepo);
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing.clone(), devices, &parent);
+
+    bus.publish(WardnetEvent::RoutingRuleChanged {
+        device_id,
+        target: RoutingTarget::Tunnel { tunnel_id },
+        previous_target: None,
+        changed_by: RuleCreator::User,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+
+    // find_by_id fails, so apply_rule is never called.
+    let calls = routing.take_calls();
+    assert!(
+        calls.is_empty(),
+        "no routing calls expected when device lookup fails"
+    );
+}
+
+#[tokio::test]
+async fn device_repo_error_does_not_panic_on_device_discovered() {
+    let device_id = Uuid::new_v4();
+
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing = Arc::new(MockRoutingService::new());
+    let devices: Arc<dyn DeviceRepository> = Arc::new(FailingDeviceRepo);
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing.clone(), devices, &parent);
+
+    bus.publish(WardnetEvent::DeviceDiscovered {
+        device_id,
+        mac: "AA:BB:CC:DD:EE:01".to_owned(),
+        ip: "192.168.1.10".to_owned(),
+        hostname: None,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+
+    // find_rule_for_device fails, so no routing calls.
+    let calls = routing.take_calls();
+    assert!(
+        calls.is_empty(),
+        "no routing calls expected when device repo fails"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::similar_names)]
+async fn routing_service_error_on_apply_rule_does_not_panic() {
+    let device_id = Uuid::new_v4();
+    let tunnel_id = Uuid::new_v4();
+    let device_ip = "192.168.1.50";
+
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing: Arc<dyn RoutingService> = Arc::new(FailingRoutingService);
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::with_device(make_device(
+        device_id, device_ip,
+    )));
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing, devices, &parent);
+
+    bus.publish(WardnetEvent::RoutingRuleChanged {
+        device_id,
+        target: RoutingTarget::Tunnel { tunnel_id },
+        previous_target: None,
+        changed_by: RuleCreator::User,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+    // apply_rule returns error, which is logged but no panic.
+}
+
+#[tokio::test]
+async fn routing_rule_changed_device_not_found_does_not_panic() {
+    let device_id = Uuid::new_v4();
+    let tunnel_id = Uuid::new_v4();
+
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing = Arc::new(MockRoutingService::new());
+    // Empty repo: device lookup returns None.
+    let devices: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing.clone(), devices, &parent);
+
+    bus.publish(WardnetEvent::RoutingRuleChanged {
+        device_id,
+        target: RoutingTarget::Tunnel { tunnel_id },
+        previous_target: None,
+        changed_by: RuleCreator::User,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+
+    // Device not found, so no apply_rule call.
+    let calls = routing.take_calls();
+    assert!(
+        calls.is_empty(),
+        "no routing calls expected when device not found"
     );
 }

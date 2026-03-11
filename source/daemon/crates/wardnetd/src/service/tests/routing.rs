@@ -567,6 +567,120 @@ fn setup_with_orphaned_rules(
     }
 }
 
+// -- Tests: auth context failures ---------------------------------------------
+
+#[tokio::test]
+async fn apply_rule_without_auth_context_fails() {
+    let ts = setup();
+
+    // Call without wrapping in as_admin — should fail with Forbidden.
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing
+            .apply_rule(device_id_1(), "192.168.1.10", &RoutingTarget::Direct),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "apply_rule without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn remove_device_routes_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing
+            .remove_device_routes(device_id_1(), "192.168.1.10"),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "remove_device_routes without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn handle_ip_change_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing
+            .handle_ip_change(device_id_1(), "192.168.1.10", "192.168.1.20"),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "handle_ip_change without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn handle_tunnel_down_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing.handle_tunnel_down(tunnel_id_1()),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "handle_tunnel_down without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn handle_tunnel_up_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing.handle_tunnel_up(tunnel_id_1()),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "handle_tunnel_up without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn reconcile_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(AuthContext::Anonymous, ts.routing.reconcile()).await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "reconcile without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn devices_using_tunnel_without_auth_context_fails() {
+    let ts = setup();
+
+    let result = auth_context::with_context(
+        AuthContext::Anonymous,
+        ts.routing.devices_using_tunnel(tunnel_id_1()),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Forbidden(_))),
+        "devices_using_tunnel without admin context should return Forbidden, got: {result:?}"
+    );
+}
+
 // -- Tests: apply_rule basics -------------------------------------------------
 
 #[tokio::test]

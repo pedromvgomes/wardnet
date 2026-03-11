@@ -164,6 +164,22 @@ async fn parse_rule_handle_handles_multiple_rules() {
     assert_eq!(handle, Some(8));
 }
 
+/// A line contains the comment but `# handle` is followed by non-numeric text.
+#[tokio::test]
+async fn parse_rule_handle_returns_none_for_malformed_handle() {
+    let output = r#"        oifname "wg_ward0" masquerade comment "wardnet:wg_ward0" # handle abc"#;
+    let handle = parse_rule_handle(output, "wardnet:wg_ward0");
+    assert_eq!(handle, None, "non-numeric handle should return None");
+}
+
+/// A line has the comment but no `# handle` suffix at all.
+#[tokio::test]
+async fn parse_rule_handle_returns_none_when_no_handle_suffix() {
+    let output = r#"        oifname "wg_ward0" masquerade comment "wardnet:wg_ward0""#;
+    let handle = parse_rule_handle(output, "wardnet:wg_ward0");
+    assert_eq!(handle, None, "line without # handle should return None");
+}
+
 // ---------------------------------------------------------------------------
 // Integration tests (with MockCommandExecutor)
 // ---------------------------------------------------------------------------
@@ -359,6 +375,88 @@ async fn check_tools_sends_version_command() {
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].program, "nft");
     assert_eq!(recorded[0].args, vec!["--version"]);
+}
+
+#[tokio::test]
+async fn remove_dns_redirect_finds_handle_and_deletes() {
+    let (mock, calls) = MockCommandExecutor::with_responses(vec![
+        // list chain returns our fixture with handle 7.
+        success_output(NFT_PREROUTING_OUTPUT),
+        // delete rule succeeds.
+        success_output(""),
+    ]);
+    let mgr = NftablesFirewallManager::new(Arc::new(mock));
+
+    mgr.remove_dns_redirect("192.168.1.100")
+        .await
+        .expect("remove_dns_redirect should succeed");
+
+    let recorded = calls.lock().await;
+    assert_eq!(recorded.len(), 2, "should issue list then delete");
+    assert_eq!(
+        recorded[1].args,
+        vec![
+            "delete",
+            "rule",
+            "inet",
+            "wardnet",
+            "prerouting",
+            "handle",
+            "7"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn remove_dns_redirect_warns_when_no_handle() {
+    let no_match = "\
+table inet wardnet {
+    chain prerouting {
+        type nat hook prerouting priority -100; policy accept;
+    }
+}
+";
+    let (mock, calls) = MockCommandExecutor::with_responses(vec![success_output(no_match)]);
+    let mgr = NftablesFirewallManager::new(Arc::new(mock));
+
+    mgr.remove_dns_redirect("192.168.1.100")
+        .await
+        .expect("should succeed even when rule not found");
+
+    let recorded = calls.lock().await;
+    assert_eq!(
+        recorded.len(),
+        1,
+        "should only issue the list call, no delete"
+    );
+}
+
+#[tokio::test]
+async fn destroy_wardnet_table_sends_correct_command() {
+    let (mock, calls) = MockCommandExecutor::new();
+    let mgr = NftablesFirewallManager::new(Arc::new(mock));
+
+    mgr.destroy_wardnet_table()
+        .await
+        .expect("destroy should succeed");
+
+    let recorded = calls.lock().await;
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].program, "nft");
+    assert_eq!(recorded[0].args, vec!["delete", "table", "inet", "wardnet"]);
+}
+
+#[tokio::test]
+async fn destroy_wardnet_table_ignores_error() {
+    let (mock, _calls) = MockCommandExecutor::with_responses(vec![failure_output(
+        "Error: No such file or directory",
+    )]);
+    let mgr = NftablesFirewallManager::new(Arc::new(mock));
+
+    // Should NOT propagate the error.
+    mgr.destroy_wardnet_table()
+        .await
+        .expect("destroy should succeed even when table doesn't exist");
 }
 
 #[tokio::test]

@@ -314,6 +314,39 @@ async fn check_tools_calls_ip_and_sysctl() {
 }
 
 #[tokio::test]
+async fn check_tools_fails_when_ip_is_missing() {
+    let mock = Arc::new(MockCommandExecutor::new(vec![failure_output(
+        "ip: command not found",
+    )]));
+    let router = IproutePolicyRouter::new(mock.clone());
+
+    let err = router.check_tools_available().await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("ip"),
+        "error should mention ip command, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn check_tools_fails_when_sysctl_is_missing() {
+    let mock = Arc::new(MockCommandExecutor::new(vec![
+        // ip -V succeeds
+        success_output("ip utility, iproute2-5.10"),
+        // sysctl --version fails
+        failure_output("sysctl: command not found"),
+    ]));
+    let router = IproutePolicyRouter::new(mock.clone());
+
+    let err = router.check_tools_available().await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("sysctl"),
+        "error should mention sysctl, got: {msg}"
+    );
+}
+
+#[tokio::test]
 async fn command_failure_returns_error() {
     let mock = Arc::new(MockCommandExecutor::new(vec![failure_output(
         "RTNETLINK answers: Operation not permitted",
