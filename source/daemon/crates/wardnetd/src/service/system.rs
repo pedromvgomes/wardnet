@@ -83,6 +83,7 @@ impl SystemService for SystemServiceImpl {
             uptime_seconds: self.started_at.elapsed().as_secs(),
             device_count: u64::try_from(device_count).unwrap_or(0),
             tunnel_count: u64::try_from(tunnel_count).unwrap_or(0),
+            tunnel_active_count: 0, // TODO: query active tunnel count
             db_size_bytes,
             cpu_usage_percent,
             memory_used_bytes,
