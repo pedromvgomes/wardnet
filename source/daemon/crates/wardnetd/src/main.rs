@@ -170,7 +170,11 @@ async fn run(config: Config, mock_network: bool) -> anyhow::Result<()> {
         device_repo.clone(),
         event_publisher.clone(),
     ));
-    let system_service = Arc::new(SystemServiceImpl::new(system_config_repo, started_at));
+    let system_service = Arc::new(SystemServiceImpl::new(
+        system_config_repo,
+        tunnel_repo.clone(),
+        started_at,
+    ));
     let tunnel_service: Arc<dyn wardnetd::service::TunnelService> =
         Arc::new(TunnelServiceImpl::new(
             tunnel_repo.clone(),
