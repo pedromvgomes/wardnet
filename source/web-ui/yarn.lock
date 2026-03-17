@@ -5,26 +5,6 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@antfu/ni@npm:^25.0.0":
-  version: 25.0.0
-  resolution: "@antfu/ni@npm:25.0.0"
-  dependencies:
-    ansis: "npm:^4.0.0"
-    fzf: "npm:^0.5.2"
-    package-manager-detector: "npm:^1.3.0"
-    tinyexec: "npm:^1.0.1"
-  bin:
-    na: bin/na.mjs
-    nci: bin/nci.mjs
-    ni: bin/ni.mjs
-    nlx: bin/nlx.mjs
-    nr: bin/nr.mjs
-    nun: bin/nun.mjs
-    nup: bin/nup.mjs
-  checksum: 10c0/a6e5eae4fafde9112088fcb41c3c5aa2e4a8b9a5252ff61ef8c4140c92e57cc85b0a02af48c1d460c66b6ec8adc109395544eaa63942b9af5954e82fdc36f2ea
-  languageName: node
-  linkType: hard
-
 "@babel/code-frame@npm:^7.0.0, @babel/code-frame@npm:^7.28.6, @babel/code-frame@npm:^7.29.0":
   version: 7.29.0
   resolution: "@babel/code-frame@npm:7.29.0"
@@ -3135,13 +3115,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ansis@npm:^4.0.0":
-  version: 4.2.0
-  resolution: "ansis@npm:4.2.0"
-  checksum: 10c0/cd6a7a681ecd36e72e0d79c1e34f1f3bcb1b15bcbb6f0f8969b4228062d3bfebbef468e09771b00d93b2294370b34f707599d4a113542a876de26823b795b5d2
-  languageName: node
-  linkType: hard
-
 "argparse@npm:^2.0.1":
   version: 2.0.1
   resolution: "argparse@npm:2.0.1"
@@ -4362,13 +4335,6 @@ __metadata:
   version: 3.1.0
   resolution: "fuzzysort@npm:3.1.0"
   checksum: 10c0/da9bb32de16f2a5c2c000b99031d9f4f8a01380c12d5d3b67296443a1152c55987ce3c4ddbfe97481b0e9b6f2fb77d61dceba29a93ad36ee23ef5bab6a31afb8
-  languageName: node
-  linkType: hard
-
-"fzf@npm:^0.5.2":
-  version: 0.5.2
-  resolution: "fzf@npm:0.5.2"
-  checksum: 10c0/5b1f945b289855891c4e3cb03db35381f8d85464dceb15b6d32f0fc74e43d7d2b9a13554cf78a86760ba762de39134d40644ccb54e60668a4bc5b15c4765d36e
   languageName: node
   linkType: hard
 
@@ -5629,13 +5595,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"package-manager-detector@npm:^1.3.0":
-  version: 1.6.0
-  resolution: "package-manager-detector@npm:1.6.0"
-  checksum: 10c0/6419d0b840be64fd45bcdcb7a19f09b81b65456d5e7f7a3daac305a4c90643052122f6ac0308afe548ffee75e36148532a2002ea9d292754f1e385aa2e1ea03b
-  languageName: node
-  linkType: hard
-
 "parent-module@npm:^1.0.0":
   version: 1.0.1
   resolution: "parent-module@npm:1.0.1"
@@ -6308,11 +6267,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"shadcn@npm:^4.0.2":
-  version: 4.0.2
-  resolution: "shadcn@npm:4.0.2"
+"shadcn@npm:^4.0.8":
+  version: 4.0.8
+  resolution: "shadcn@npm:4.0.8"
   dependencies:
-    "@antfu/ni": "npm:^25.0.0"
     "@babel/core": "npm:^7.28.0"
     "@babel/parser": "npm:^7.28.0"
     "@babel/plugin-transform-typescript": "npm:^7.28.0"
@@ -6349,7 +6307,7 @@ __metadata:
     zod-to-json-schema: "npm:^3.24.6"
   bin:
     shadcn: dist/index.js
-  checksum: 10c0/aa0cc58a5bcb148fc0a35c61ec910483a64d2c0b7c18cf22f7e1e8908a4e9381d3f13a8d7036e3eff967b6835e79d4726c731c69cb4c74e5a56aede58de061a7
+  checksum: 10c0/9b877204f6378698460505b24812d293b2fbb01aeada1751748a66c53baeacbbad3bf0be82ee94cd267f17100e50329d46068588f7a167fac73a20f339577d43
   languageName: node
   linkType: hard
 
@@ -6636,13 +6594,6 @@ __metadata:
   version: 1.3.3
   resolution: "tiny-invariant@npm:1.3.3"
   checksum: 10c0/65af4a07324b591a059b35269cd696aba21bef2107f29b9f5894d83cc143159a204b299553435b03874ebb5b94d019afa8b8eff241c8a4cfee95872c2e1c1c4a
-  languageName: node
-  linkType: hard
-
-"tinyexec@npm:^1.0.1":
-  version: 1.0.2
-  resolution: "tinyexec@npm:1.0.2"
-  checksum: 10c0/1261a8e34c9b539a9aae3b7f0bb5372045ff28ee1eba035a2a059e532198fe1a182ec61ac60fa0b4a4129f0c4c4b1d2d57355b5cb9aa2d17ac9454ecace502ee
   languageName: node
   linkType: hard
 
@@ -7027,7 +6978,7 @@ __metadata:
     react: "npm:^19.2.4"
     react-dom: "npm:^19.2.4"
     react-router: "npm:^7.13.1"
-    shadcn: "npm:^4.0.2"
+    shadcn: "npm:^4.0.8"
     tailwind-merge: "npm:^3.5.0"
     tailwindcss: "npm:^4.2.1"
     tw-animate-css: "npm:^1.4.0"
