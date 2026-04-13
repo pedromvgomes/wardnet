@@ -116,11 +116,14 @@ make deploy PI_HOST=192.168.1.50
 ### Development
 
 ```bash
-# Web UI dev server (port 7412, proxies API to daemon on 7411)
-cd source/web-ui && yarn dev
+# Run everything locally: daemon (mock network) + web UI dev server
+# Daemon on :7411, web UI on :7412 (proxies /api → daemon). Ctrl+C stops both.
+make run-local                  # fresh DB each run
+make run-local RESUME=true      # keep the existing local DB
 
-# Run daemon locally with mock network backends
+# Or run them separately if you prefer:
 cd source/daemon && cargo run -p wardnetd -- --mock-network --verbose
+cd source/web-ui && yarn dev
 
 # Run all checks (format, lint, tests for web + daemon)
 make check
@@ -146,7 +149,9 @@ Run `make help` for the full list:
 | `make check`     | Run all checks (web + daemon)                          |
 | `make check-web` | Typecheck + lint + format check for web UI             |
 | `make check-daemon` | Format + clippy + tests for daemon                  |
-| `make deploy`    | Build for Pi and deploy via SSH                        |
+| `make run-local` | Run daemon (mock network) + web UI dev server locally  |
+| `make run-pi`    | Cross-compile, deploy, and run on a Raspberry Pi       |
+| `make deploy-prod` | Production deploy to a Raspberry Pi                  |
 | `make clean`     | Clean all build artifacts                              |
 
 ## CI

@@ -21,6 +21,7 @@ All builds are driven by the root **Makefile**. Use `make help` to see all targe
 - **`make check-sdk`** — SDK typecheck + format check
 - **`make check-web`** — web UI typecheck + lint + format check (depends on SDK)
 - **`make check-daemon`** — Rust format + clippy + tests
+- **`make run-local`** — build, then run the daemon with `--mock-network` + the Vite dev server together. Daemon on `:7411`, web UI on `:7412` (proxies `/api`). Ctrl+C stops both. Data lives under `./.wardnet-local/` (gitignored). `RESUME=true` keeps the existing local DB across runs. Use this for UI changes and daemon logic that doesn't need real kernel interfaces.
 - **`make run-pi PI_HOST=<ip> PI_USER=<user> PI_LAN_IF=<iface>`** — cross-compile, deploy via SSH, run with verbose logging. Cleans database by default; `RESUME=true` keeps existing data. `OTEL=true` enables OpenTelemetry export.
 - **`make system-test`** — full E2E: build, deploy daemon + test-agent to Pi, run system tests, teardown
 - **`make system-test-setup`** — deploy and start test infrastructure on Pi (leave running)
