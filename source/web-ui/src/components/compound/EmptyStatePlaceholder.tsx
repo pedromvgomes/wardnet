@@ -68,10 +68,7 @@ export function EmptyStatePlaceholder({
                 />
               </div>
               {/* Plus badge */}
-              <PlusCircle
-                className="-ml-4 mb-0.5 size-8 text-primary/30"
-                strokeWidth={1.5}
-              />
+              <PlusCircle className="-ml-4 mb-0.5 size-8 text-primary/30" strokeWidth={1.5} />
             </>
           )}
         </div>

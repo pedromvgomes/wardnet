@@ -320,6 +320,7 @@ fn build_state_with_dhcp(
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(StubTunnelService),
+        Arc::new(crate::dhcp::server::NoopDhcpServer),
         Arc::new(StubEventPublisher),
         LogBroadcaster::new(16),
         RecentErrors::new(),
@@ -604,9 +605,11 @@ async fn get_device_by_id_success() {
 
     let (status, json) = get_json(app, "/api/devices/00000000-0000-0000-0000-000000000001").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["mac"], "AA:BB:CC:DD:EE:01");
+    // DeviceDetailResponse is { device, current_rule } — device fields are
+    // nested, current_rule sits at the top level.
+    assert_eq!(json["device"]["mac"], "AA:BB:CC:DD:EE:01");
     assert_eq!(json["current_rule"]["type"], "direct");
-    assert_eq!(json["dhcp_status"], "external");
+    assert_eq!(json["device"]["dhcp_status"], "external");
 }
 
 #[tokio::test]
@@ -660,8 +663,7 @@ async fn update_device_success() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    // DeviceDetailResponse uses flatten, so fields are at the top level.
-    assert_eq!(json["name"], "Renamed Device");
+    assert_eq!(json["device"]["name"], "Renamed Device");
 }
 
 #[tokio::test]
@@ -683,8 +685,7 @@ async fn update_device_with_type() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    // With flatten, device fields are at the top level.
-    assert!(json["mac"].is_string());
+    assert!(json["device"]["mac"].is_string());
 }
 
 #[tokio::test]

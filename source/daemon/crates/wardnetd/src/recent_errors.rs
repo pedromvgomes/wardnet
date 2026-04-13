@@ -24,8 +24,15 @@ pub struct RecentErrors {
     entries: std::sync::Arc<Mutex<VecDeque<RecentError>>>,
 }
 
+impl Default for RecentErrors {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecentErrors {
     /// Create a new empty buffer.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entries: std::sync::Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ENTRIES))),
@@ -42,6 +49,7 @@ impl RecentErrors {
     }
 
     /// Return all recent entries (newest last).
+    #[must_use]
     pub fn get_recent(&self) -> Vec<RecentError> {
         self.entries.lock().unwrap().iter().cloned().collect()
     }
@@ -55,6 +63,7 @@ pub struct RecentErrorsLayer {
 
 impl RecentErrorsLayer {
     /// Create a new layer backed by the given buffer.
+    #[must_use]
     pub fn new(buffer: RecentErrors) -> Self {
         Self { buffer }
     }

@@ -322,10 +322,7 @@ impl PolicyRouter for MockNetlink {
     }
 
     async fn flush_route_cache(&self) -> anyhow::Result<()> {
-        self.calls
-            .lock()
-            .await
-            .push("flush_route_cache".to_owned());
+        self.calls.lock().await.push("flush_route_cache".to_owned());
         Ok(())
     }
 
@@ -595,6 +592,7 @@ fn setup_with_orphaned_rules(
         netlink,
         nftables,
         "direct".to_owned(),
+        "eth0".to_owned(),
     );
 
     TestSetup {
@@ -642,6 +640,7 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         netlink,
         nftables,
         "direct".to_owned(),
+        "eth0".to_owned(),
     );
 
     TestSetup {
@@ -783,10 +782,16 @@ async fn apply_rule_direct_is_noop_for_kernel() {
     let nl = ts.netlink_calls.lock().await;
     let nf = ts.nftables_calls.lock().await;
 
-    // Direct routing should NOT add any ip rules or nftables rules.
-    assert!(
-        nl.is_empty(),
-        "no netlink calls expected for direct: {nl:?}"
+    // Direct routing adds no ip rules or nftables rules — only the conntrack
+    // and route-cache flushes that always run after a policy change so old
+    // flows don't stay pinned to a previous tunnel's masquerade state.
+    assert_eq!(
+        *nl,
+        vec![
+            "flush_conntrack:192.168.1.10".to_owned(),
+            "flush_route_cache".to_owned(),
+        ],
+        "direct routing should only flush conntrack + route cache: {nl:?}"
     );
     assert!(
         nf.is_empty(),
@@ -962,10 +967,15 @@ async fn apply_rule_default_resolves_to_direct() {
     let nl = ts.netlink_calls.lock().await;
     let nf = ts.nftables_calls.lock().await;
 
-    // Direct routing produces no kernel calls.
-    assert!(
-        nl.is_empty(),
-        "default->direct should not add ip rules: {nl:?}"
+    // Direct routing adds no ip rules — only the conntrack and route-cache
+    // flushes that always run after a policy change.
+    assert_eq!(
+        *nl,
+        vec![
+            "flush_conntrack:192.168.1.10".to_owned(),
+            "flush_route_cache".to_owned(),
+        ],
+        "default->direct should only flush conntrack + route cache: {nl:?}"
     );
     assert!(
         nf.is_empty(),

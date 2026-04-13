@@ -36,7 +36,12 @@ interface EditDeviceFormProps {
 }
 
 /** Form body for editing a device's name, type, routing, and lock status. */
-export function EditDeviceForm({ device, currentRule, onClose, onReserveAddress }: EditDeviceFormProps) {
+export function EditDeviceForm({
+  device,
+  currentRule,
+  onClose,
+  onReserveAddress,
+}: EditDeviceFormProps) {
   const { data: tunnelData } = useTunnels();
   const updateDevice = useUpdateDevice();
   const tunnels = tunnelData?.tunnels ?? [];

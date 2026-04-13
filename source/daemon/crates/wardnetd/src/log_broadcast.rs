@@ -35,12 +35,14 @@ pub struct LogBroadcaster {
 
 impl LogBroadcaster {
     /// Create a new broadcaster with the given channel capacity.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         Self { tx }
     }
 
     /// Subscribe to receive log entries.
+    #[must_use]
     pub fn subscribe(&self) -> broadcast::Receiver<LogEntry> {
         self.tx.subscribe()
     }
@@ -58,6 +60,7 @@ pub struct BroadcastLayer {
 
 impl BroadcastLayer {
     /// Create a new layer backed by the given broadcaster.
+    #[must_use]
     pub fn new(broadcaster: LogBroadcaster) -> Self {
         Self { broadcaster }
     }

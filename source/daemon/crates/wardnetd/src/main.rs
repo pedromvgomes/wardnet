@@ -167,13 +167,11 @@ async fn run(
     let backends = network_backends(mock_network);
 
     // Detect wardnet's own LAN IP for DHCP gateway advertisement.
-    let lan_ip = wardnetd::packet_capture_pnet::get_interface_ipv4(
-        &config.network.lan_interface,
-    )
-    .unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "failed to detect LAN IP, using 0.0.0.0");
-        std::net::Ipv4Addr::UNSPECIFIED
-    });
+    let lan_ip = wardnetd::packet_capture_pnet::get_interface_ipv4(&config.network.lan_interface)
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to detect LAN IP, using 0.0.0.0");
+            std::net::Ipv4Addr::UNSPECIFIED
+        });
     tracing::info!(
         lan_ip = %lan_ip,
         interface = %config.network.lan_interface,
@@ -197,8 +195,11 @@ async fn run(
         device_repo.clone(),
         event_publisher.clone(),
     ));
-    let dhcp_service: Arc<dyn wardnetd::service::DhcpService> =
-        Arc::new(DhcpServiceImpl::new(dhcp_repo, system_config_repo.clone(), lan_ip));
+    let dhcp_service: Arc<dyn wardnetd::service::DhcpService> = Arc::new(DhcpServiceImpl::new(
+        dhcp_repo,
+        system_config_repo.clone(),
+        lan_ip,
+    ));
     let system_service = Arc::new(SystemServiceImpl::new(
         system_config_repo,
         tunnel_repo.clone(),

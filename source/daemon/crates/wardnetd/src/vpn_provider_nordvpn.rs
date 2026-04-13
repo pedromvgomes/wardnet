@@ -394,7 +394,7 @@ impl VpnProvider for NordVpnProvider {
             .split('.')
             .next()
             .and_then(|h| {
-                let letters: String = h.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+                let letters: String = h.chars().take_while(char::is_ascii_alphabetic).collect();
                 if letters.len() == 2 {
                     Some(letters.to_uppercase())
                 } else {
@@ -406,14 +406,14 @@ impl VpnProvider for NordVpnProvider {
         // Use the recommendations endpoint to get a server with the WireGuard
         // public key. The hostname filter API (`filters[hostname]`) is unreliable
         // and returns wrong servers for dedicated IPs and some regions.
-        let country_id = if !country_code.is_empty() {
+        let country_id = if country_code.is_empty() {
+            None
+        } else {
             let countries = self.api.list_countries().await?;
             countries
                 .iter()
                 .find(|c| c.code.eq_ignore_ascii_case(&country_code))
                 .map(|c| c.id)
-        } else {
-            None
         };
 
         let filter = NordServerFilter {
@@ -455,14 +455,14 @@ impl VpnProvider for NordVpnProvider {
         // Get the WireGuard public key from a recommended server in the same
         // country. All servers in a region share the same WireGuard key group.
         // We avoid the hostname filter API which is unreliable for dedicated IPs.
-        let country_id = if !server.country_code.is_empty() {
+        let country_id = if server.country_code.is_empty() {
+            None
+        } else {
             let countries = self.api.list_countries().await?;
             countries
                 .iter()
                 .find(|c| c.code.eq_ignore_ascii_case(&server.country_code))
                 .map(|c| c.id)
-        } else {
-            None
         };
 
         let filter = NordServerFilter {

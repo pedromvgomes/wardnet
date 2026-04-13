@@ -112,6 +112,7 @@ fn make_state(auth: impl AuthService + 'static, system: impl SystemService + 'st
         Arc::new(StubRoutingService),
         Arc::new(system),
         Arc::new(StubTunnelService),
+        Arc::new(crate::dhcp::server::NoopDhcpServer),
         Arc::new(StubEventPublisher),
         crate::log_broadcast::LogBroadcaster::new(16),
         crate::recent_errors::RecentErrors::new(),

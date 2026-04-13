@@ -50,18 +50,15 @@ function RoutingForm({
   const setMyRule = useSetMyRule();
 
   // Determine initial mode and tunnel selection.
-  const initialMode =
-    currentRule?.type === "tunnel" && currentRule.tunnel_id ? "vpn" : "direct";
+  const initialMode = currentRule?.type === "tunnel" && currentRule.tunnel_id ? "vpn" : "direct";
   const initialTunnelId =
-    currentRule?.type === "tunnel" ? currentRule.tunnel_id : tunnels[0]?.id ?? "";
+    currentRule?.type === "tunnel" ? currentRule.tunnel_id : (tunnels[0]?.id ?? "");
 
   const [mode, setMode] = useState(initialMode);
   const [tunnelId, setTunnelId] = useState(initialTunnelId);
 
   const selectedTarget: RoutingTarget =
-    mode === "vpn" && tunnelId
-      ? { type: "tunnel", tunnel_id: tunnelId }
-      : { type: "direct" };
+    mode === "vpn" && tunnelId ? { type: "tunnel", tunnel_id: tunnelId } : { type: "direct" };
 
   const hasChanges = !targetsEqual(selectedTarget, currentRule);
 

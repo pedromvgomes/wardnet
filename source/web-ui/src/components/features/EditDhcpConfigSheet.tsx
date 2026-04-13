@@ -96,7 +96,8 @@ export function EditDhcpConfigSheet({ config, open, onOpenChange }: EditDhcpConf
               placeholder="10.232.1.1"
             />
             <p className="text-xs text-muted-foreground">
-              Your real router's IP. Included as secondary gateway in DHCP so devices fall back if the wardnet server is unavailable.
+              Your real router's IP. Included as secondary gateway in DHCP so devices fall back if
+              the wardnet server is unavailable.
             </p>
           </div>
 
@@ -109,7 +110,8 @@ export function EditDhcpConfigSheet({ config, open, onOpenChange }: EditDhcpConf
               placeholder="1.1.1.1, 8.8.8.8"
             />
             <p className="text-xs text-muted-foreground">
-              DNS servers advertised to clients. Will be replaced by Wardnet's built-in DNS once enabled.
+              DNS servers advertised to clients. Will be replaced by Wardnet's built-in DNS once
+              enabled.
             </p>
           </div>
 

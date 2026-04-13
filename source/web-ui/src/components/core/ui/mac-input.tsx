@@ -17,7 +17,14 @@ function parseSegments(value: string): [string, string, string, string, string, 
   for (let i = 0; i < 6; i++) {
     parts.push(clean.slice(i * 2, i * 2 + 2));
   }
-  return [parts[0] ?? "", parts[1] ?? "", parts[2] ?? "", parts[3] ?? "", parts[4] ?? "", parts[5] ?? ""];
+  return [
+    parts[0] ?? "",
+    parts[1] ?? "",
+    parts[2] ?? "",
+    parts[3] ?? "",
+    parts[4] ?? "",
+    parts[5] ?? "",
+  ];
 }
 
 function joinSegments(segs: string[]): string {
@@ -35,7 +42,15 @@ export function MacInput({
   className,
   id,
 }: MacInputProps) {
-  const refs = Array.from({ length: 6 }, () => useRef<HTMLInputElement>(null));
+  // Six individual useRef calls (hook count must be constant and not called
+  // inside a callback — `Array.from(() => useRef(...))` violates both).
+  const ref0 = useRef<HTMLInputElement>(null);
+  const ref1 = useRef<HTMLInputElement>(null);
+  const ref2 = useRef<HTMLInputElement>(null);
+  const ref3 = useRef<HTMLInputElement>(null);
+  const ref4 = useRef<HTMLInputElement>(null);
+  const ref5 = useRef<HTMLInputElement>(null);
+  const refs = [ref0, ref1, ref2, ref3, ref4, ref5];
   const segments = parseSegments(value);
   const placeholderSegs = placeholder.split(":").map((s) => s.slice(0, 2));
 

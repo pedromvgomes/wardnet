@@ -23,9 +23,7 @@ function createColumns(
     {
       accessorKey: "ip_address",
       header: "IP",
-      cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.ip_address}</span>
-      ),
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.ip_address}</span>,
     },
     {
       accessorKey: "mac_address",

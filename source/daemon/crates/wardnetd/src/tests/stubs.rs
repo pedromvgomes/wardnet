@@ -208,7 +208,10 @@ impl TunnelService for StubTunnelService {
         unimplemented!()
     }
     async fn list_tunnels(&self) -> Result<ListTunnelsResponse, AppError> {
-        unimplemented!()
+        // Return empty — several API handlers enrich their responses with the
+        // tunnel list, and tests that don't care about tunnels would otherwise
+        // panic. Tests that need specific tunnels plug in their own mock.
+        Ok(ListTunnelsResponse { tunnels: vec![] })
     }
     async fn get_tunnel(&self, _id: Uuid) -> Result<Tunnel, AppError> {
         unimplemented!()

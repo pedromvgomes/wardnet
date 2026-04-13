@@ -78,14 +78,13 @@ impl PolicyRouter for IproutePolicyRouter {
     async fn enable_ip_forwarding(&self) -> anyhow::Result<()> {
         // Write directly to /proc/sys instead of using sysctl, which requires
         // CAP_SYS_ADMIN. Writing to procfs works with CAP_NET_ADMIN.
-        match tokio::fs::write("/proc/sys/net/ipv4/ip_forward", "1").await {
-            Ok(()) => Ok(()),
-            Err(_) => {
-                // Fall back to sysctl for environments where procfs isn't writable
-                // (e.g. containers, or testing on macOS).
-                self.run("sysctl", &["-w", "net.ipv4.ip_forward=1"]).await?;
-                Ok(())
-            }
+        if let Ok(()) = tokio::fs::write("/proc/sys/net/ipv4/ip_forward", "1").await {
+            Ok(())
+        } else {
+            // Fall back to sysctl for environments where procfs isn't writable
+            // (e.g. containers, or testing on macOS).
+            self.run("sysctl", &["-w", "net.ipv4.ip_forward=1"]).await?;
+            Ok(())
         }
     }
 
@@ -188,11 +187,7 @@ impl PolicyRouter for IproutePolicyRouter {
             .unwrap_or(0);
 
         if output.success || output.stderr.contains("flow entries have been deleted") {
-            tracing::info!(
-                src_ip,
-                deleted,
-                "flushed conntrack entries for source IP"
-            );
+            tracing::info!(src_ip, deleted, "flushed conntrack entries for source IP");
             return Ok(());
         }
 

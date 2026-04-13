@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/core/ui/button";
 import { Input } from "@/components/core/ui/input";
 import { Ipv4Input } from "@/components/core/ui/ipv4-input";
@@ -30,26 +30,14 @@ export function CreateReservationSheet({
 }: CreateReservationSheetProps) {
   const createReservation = useCreateReservation();
 
-  const [macAddress, setMacAddress] = useState("");
-  const [ipAddress, setIpAddress] = useState("");
-  const [hostname, setHostname] = useState("");
-  const [description, setDescription] = useState("");
-
-  // Apply defaults when the sheet opens with new defaults.
-  useEffect(() => {
-    if (open && defaults) {
-      setMacAddress(defaults.mac ?? "");
-      setIpAddress(defaults.ip ?? "");
-      setHostname(defaults.hostname ?? "");
-      setDescription(defaults.description ?? "");
-    }
-    if (!open) {
-      setMacAddress("");
-      setIpAddress("");
-      setHostname("");
-      setDescription("");
-    }
-  }, [open, defaults]);
+  // Initial values are taken from `defaults` on first mount. The parent is
+  // expected to re-mount this component whenever it needs fresh defaults
+  // (typically by giving the `<Sheet>` a key tied to `defaults`), which is
+  // cleaner than syncing state via useEffect and avoids cascading renders.
+  const [macAddress, setMacAddress] = useState(defaults?.mac ?? "");
+  const [ipAddress, setIpAddress] = useState(defaults?.ip ?? "");
+  const [hostname, setHostname] = useState(defaults?.hostname ?? "");
+  const [description, setDescription] = useState(defaults?.description ?? "");
 
   async function handleSave() {
     await createReservation.mutateAsync({
@@ -109,7 +97,10 @@ export function CreateReservationSheet({
           </div>
 
           {createReservation.isError && (
-            <ApiErrorAlert error={createReservation.error} fallback="Failed to create reservation" />
+            <ApiErrorAlert
+              error={createReservation.error}
+              fallback="Failed to create reservation"
+            />
           )}
 
           <Button onClick={handleSave} disabled={createReservation.isPending} className="w-full">

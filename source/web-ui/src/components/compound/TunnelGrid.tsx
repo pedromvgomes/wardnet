@@ -48,12 +48,7 @@ export function TunnelGrid({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {tunnels.map((tunnel) => (
-        <TunnelCard
-          key={tunnel.id}
-          tunnel={tunnel}
-          providers={providers}
-          onDelete={onDelete}
-        />
+        <TunnelCard key={tunnel.id} tunnel={tunnel} providers={providers} onDelete={onDelete} />
       ))}
     </div>
   );

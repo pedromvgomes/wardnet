@@ -54,7 +54,10 @@ export function DataTable<TData, TValue>({
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className={cn("px-4 py-3 text-muted-foreground", header.column.columnDef.meta?.className)}
+                  className={cn(
+                    "px-4 py-3 text-muted-foreground",
+                    header.column.columnDef.meta?.className,
+                  )}
                 >
                   {header.isPlaceholder
                     ? null
@@ -84,7 +87,10 @@ export function DataTable<TData, TValue>({
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+              <TableCell
+                colSpan={columns.length}
+                className="h-24 text-center text-muted-foreground"
+              >
                 {emptyMessage}
               </TableCell>
             </TableRow>

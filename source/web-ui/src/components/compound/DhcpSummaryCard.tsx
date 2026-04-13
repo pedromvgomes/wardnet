@@ -45,7 +45,10 @@ export function DhcpSummaryCard({ status, to }: DhcpSummaryCardProps) {
 
   if (to) {
     return (
-      <Link to={to} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg">
+      <Link
+        to={to}
+        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+      >
         {card}
       </Link>
     );

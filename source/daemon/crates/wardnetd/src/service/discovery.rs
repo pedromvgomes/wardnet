@@ -293,10 +293,10 @@ impl DeviceDiscoveryService for DeviceDiscoveryServiceImpl {
         // Filter out observations from IPs outside the LAN subnet.
         // When the Pi is the gateway, return traffic from the internet arrives
         // with the router's MAC but remote server IPs — ignore those.
-        if let Ok(ip) = obs.ip.parse::<std::net::Ipv4Addr>() {
-            if !self.lan_subnet.contains(ip) {
-                return Ok(ObservationResult::Ignored);
-            }
+        if let Ok(ip) = obs.ip.parse::<std::net::Ipv4Addr>()
+            && !self.lan_subnet.contains(ip)
+        {
+            return Ok(ObservationResult::Ignored);
         }
 
         // Phase 1: determine action while holding the lock, then drop it.

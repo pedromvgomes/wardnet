@@ -15,7 +15,7 @@ enum ClientCommand {
     SetFilter {
         /// Minimum level: "trace", "debug", "info", "warn", "error".
         level: Option<String>,
-        /// Target prefix filter (e.g. "wardnetd::service"). Empty = all.
+        /// Target prefix filter (e.g. "`wardnetd::service`"). Empty = all.
         target: Option<String>,
     },
 }
@@ -24,9 +24,9 @@ fn level_priority(level: &str) -> u8 {
     match level.to_uppercase().as_str() {
         "TRACE" => 0,
         "DEBUG" => 1,
-        "INFO" => 2,
         "WARN" => 3,
         "ERROR" => 4,
+        // "INFO" and any unknown level default to INFO priority.
         _ => 2,
     }
 }
@@ -66,9 +66,8 @@ async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<LogEnt
                             continue;
                         }
 
-                        let json = match serde_json::to_string(&entry) {
-                            Ok(j) => j,
-                            Err(_) => continue,
+                        let Ok(json) = serde_json::to_string(&entry) else {
+                            continue;
                         };
 
                         if socket.send(Message::Text(json.into())).await.is_err() {

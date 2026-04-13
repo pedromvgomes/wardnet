@@ -387,18 +387,41 @@ async fn create_and_find_by_username() {
 
 ## Pre-push checklist (MANDATORY)
 
-**You MUST run checks locally and fix ALL issues BEFORE every `git push`.** CI will reject the push otherwise. This is a hard gate — never push without passing checks.
+**You MUST run checks locally and fix ALL issues BEFORE every `git push`.** CI mirrors these exact Make targets — if any of them fail locally, CI will fail and the push will be rejected. This is a hard gate; never push without passing checks.
+
+The fastest, most complete signal is the root Makefile:
 
 ```bash
-# For Rust changes:
-cd source/daemon && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test --workspace
-
-# For web UI changes:
-cd source/web-ui && yarn format && yarn lint && yarn type-check
-
-# Or run everything at once:
+# One-shot: runs SDK + web UI + site + daemon checks (format, lint, type-check,
+# clippy, tests). This is exactly what CI runs.
 make check
 ```
+
+If you only changed one area, the narrower targets are faster:
+
+```bash
+# Rust daemon — cargo fmt --check, cargo clippy --all-targets -- -D warnings,
+# cargo test --workspace (must all pass)
+make check-daemon
+
+# Web UI — typecheck + eslint + prettier format:check
+make check-web
+
+# Public marketing site
+make check-site
+```
+
+Direct tool invocation is also fine if you want tighter iteration:
+
+```bash
+cd source/daemon && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test --workspace
+cd source/web-ui  && yarn format && yarn lint && yarn type-check
+```
+
+**Common mistakes to avoid**
+- Running only `cargo build` and assuming tests pass — the test compile target has its own stubs that can fall out of sync with service signatures; always run `cargo test --workspace` (or `make check-daemon`) before pushing.
+- Running `yarn build` but skipping `yarn lint` — Vite is permissive about lint warnings that ESLint elevates to errors in CI.
+- Pushing a rebase without re-running checks locally — dependency bumps pulled in from `main` can change lint/type rules; treat every rebase as a fresh change.
 
 **Code coverage (MANDATORY for Rust changes):**
 We use `cargo-llvm-cov` for code coverage. Before starting work, compute the current coverage baseline on `main` (or during planning). After implementation, run it again on your branch and verify coverage **does not decrease**. New code must have tests — coverage should stay the same or increase. It must never go down.

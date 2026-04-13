@@ -87,12 +87,7 @@ interface LogViewerProps {
 }
 
 /** Scrollable log viewer displaying structured log entries. */
-export function LogViewer({
-  entries,
-  connected,
-  skipped,
-  maxHeight = "24rem",
-}: LogViewerProps) {
+export function LogViewer({ entries, connected, skipped, maxHeight = "24rem" }: LogViewerProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">

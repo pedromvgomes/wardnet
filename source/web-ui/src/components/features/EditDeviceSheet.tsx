@@ -43,7 +43,9 @@ export function EditDeviceSheet({ deviceId, open, onOpenChange }: EditDeviceShee
 
       <CreateReservationSheet
         open={!!reservationDefaults}
-        onOpenChange={(o) => { if (!o) setReservationDefaults(null); }}
+        onOpenChange={(o) => {
+          if (!o) setReservationDefaults(null);
+        }}
         defaults={reservationDefaults ?? undefined}
       />
     </>

@@ -36,7 +36,7 @@ pub fn get_interface_ipv4(name: &str) -> anyhow::Result<std::net::Ipv4Addr> {
     let iface = find_interface(name)?;
     if let Some(ip) = iface.ips.iter().find_map(|ip| match ip {
         pnet::ipnetwork::IpNetwork::V4(net) => Some(net.ip()),
-        _ => None,
+        pnet::ipnetwork::IpNetwork::V6(_) => None,
     }) {
         return Ok(ip);
     }
@@ -52,24 +52,22 @@ pub fn get_interface_ipv4(name: &str) -> anyhow::Result<std::net::Ipv4Addr> {
                 .output()
         });
 
-    if let Ok(out) = output {
-        if out.status.success() {
-            // JSON output: [{"addr_info":[{"local":"10.232.1.10",...}]}]
-            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
-                if let Some(ip_str) = v
-                    .as_array()
-                    .and_then(|arr| arr.first())
-                    .and_then(|obj| obj.get("addr_info"))
-                    .and_then(|ai| ai.as_array())
-                    .and_then(|arr| arr.first())
-                    .and_then(|info| info.get("local"))
-                    .and_then(|l| l.as_str())
-                {
-                    if let Ok(ip) = ip_str.parse() {
-                        return Ok(ip);
-                    }
-                }
-            }
+    if let Ok(out) = output
+        && out.status.success()
+    {
+        // JSON output: [{"addr_info":[{"local":"10.232.1.10",...}]}]
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout)
+            && let Some(ip_str) = v
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|obj| obj.get("addr_info"))
+                .and_then(|ai| ai.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|info| info.get("local"))
+                .and_then(|l| l.as_str())
+            && let Ok(ip) = ip_str.parse()
+        {
+            return Ok(ip);
         }
     }
 

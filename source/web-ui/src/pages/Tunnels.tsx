@@ -25,9 +25,7 @@ export default function Tunnels() {
       <PageHeader
         title="Tunnels"
         actions={
-          hasTunnels ? (
-            <Button onClick={() => setCreateOpen(true)}>Add Tunnel</Button>
-          ) : undefined
+          hasTunnels ? <Button onClick={() => setCreateOpen(true)}>Add Tunnel</Button> : undefined
         }
       />
 
@@ -44,7 +42,9 @@ export default function Tunnels() {
 
       <ConfirmDialog
         open={!!deleteId}
-        onOpenChange={(open) => { if (!open) setDeleteId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteId(null);
+        }}
         title="Delete tunnel"
         description={`Are you sure you want to delete "${tunnelToDelete?.label ?? "this tunnel"}"? Devices routed through it will be switched to direct.`}
         confirmLabel="Delete"

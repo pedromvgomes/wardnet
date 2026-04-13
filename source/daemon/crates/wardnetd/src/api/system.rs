@@ -74,10 +74,10 @@ async fn find_current_log(configured_path: &std::path::Path) -> Result<String, A
 
     let mut candidates = Vec::new();
     while let Ok(Some(entry)) = entries.next_entry().await {
-        if let Some(name) = entry.file_name().to_str() {
-            if name.starts_with(prefix) {
-                candidates.push(entry.path());
-            }
+        if let Some(name) = entry.file_name().to_str()
+            && name.starts_with(prefix)
+        {
+            candidates.push(entry.path());
         }
     }
 

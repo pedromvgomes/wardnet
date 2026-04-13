@@ -30,9 +30,7 @@ const columns: ColumnDef<Device>[] = [
         <div className="flex items-center gap-3">
           <DeviceIcon type={device.device_type} />
           <div className="flex flex-col">
-            <span className="font-medium">
-              {device.name ?? device.hostname ?? device.mac}
-            </span>
+            <span className="font-medium">{device.name ?? device.hostname ?? device.mac}</span>
             {(device.name || device.hostname) && (
               <span className="text-xs text-muted-foreground">{device.mac}</span>
             )}
@@ -45,9 +43,7 @@ const columns: ColumnDef<Device>[] = [
     accessorKey: "last_ip",
     header: "IP",
     meta: { className: "hidden md:table-cell" },
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.last_ip}</span>
-    ),
+    cell: ({ row }) => <span className="text-muted-foreground">{row.original.last_ip}</span>,
   },
   {
     accessorKey: "device_type",
@@ -99,10 +95,6 @@ interface DeviceTableProps {
 /** Table listing network devices. Receives pre-filtered, pre-sorted data. */
 export function DeviceTable({ devices, onDeviceClick }: DeviceTableProps) {
   return (
-    <DataTable
-      columns={columns}
-      data={devices}
-      onRowClick={(device) => onDeviceClick(device.id)}
-    />
+    <DataTable columns={columns} data={devices} onRowClick={(device) => onDeviceClick(device.id)} />
   );
 }

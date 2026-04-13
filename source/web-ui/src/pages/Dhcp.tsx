@@ -32,7 +32,10 @@ export default function Dhcp() {
   const deleteReservation = useDeleteReservation();
 
   const [editConfigOpen, setEditConfigOpen] = useState(false);
-  const [reservationSheet, setReservationSheet] = useState<{ open: boolean; defaults?: ReservationDefaults }>({ open: false });
+  const [reservationSheet, setReservationSheet] = useState<{
+    open: boolean;
+    defaults?: ReservationDefaults;
+  }>({ open: false });
   const [revokeLeaseId, setRevokeLeaseId] = useState<string | null>(null);
   const [deleteReservationId, setDeleteReservationId] = useState<string | null>(null);
 
@@ -103,8 +106,14 @@ export default function Dhcp() {
             onOpenChange={setEditConfigOpen}
           />
           <CreateReservationSheet
+            // Keyed on the defaults identity so the sheet mounts fresh each
+            // time it's opened — this lets the component's initial useState
+            // values pick up the latest defaults without a useEffect sync.
+            key={reservationSheet.open ? JSON.stringify(reservationSheet.defaults ?? {}) : "closed"}
             open={reservationSheet.open}
-            onOpenChange={(o) => { if (!o) setReservationSheet({ open: false }); }}
+            onOpenChange={(o) => {
+              if (!o) setReservationSheet({ open: false });
+            }}
             defaults={reservationSheet.defaults}
           />
         </div>
@@ -112,7 +121,9 @@ export default function Dhcp() {
 
       <ConfirmDialog
         open={!!revokeLeaseId}
-        onOpenChange={(open) => { if (!open) setRevokeLeaseId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setRevokeLeaseId(null);
+        }}
         title="Revoke lease"
         description={`Revoke the lease for ${leaseToRevoke?.ip_address ?? "this device"}${leaseToRevoke?.hostname ? ` (${leaseToRevoke.hostname})` : ""}? The device will need to request a new address.`}
         confirmLabel="Revoke"
@@ -124,7 +135,9 @@ export default function Dhcp() {
 
       <ConfirmDialog
         open={!!deleteReservationId}
-        onOpenChange={(open) => { if (!open) setDeleteReservationId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteReservationId(null);
+        }}
         title="Delete reservation"
         description={`Delete the reservation for ${reservationToDelete?.ip_address ?? "this address"}${reservationToDelete?.description ? ` (${reservationToDelete.description})` : ""}? The MAC address will receive a dynamic IP on next renewal.`}
         confirmLabel="Delete"
