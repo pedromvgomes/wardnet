@@ -81,11 +81,27 @@ check-site:
 
 # ---------- Daemon ----------
 
-build-daemon:
-	cd $(DAEMON_DIR) && cargo build --release
+# `build-daemon` compiles the Rust workspace. Two optional vars let CI (and
+# advanced local builds) reuse this target for cross-compilation without
+# duplicating the recipe or re-running the web UI build:
+#
+#   TARGET=<rust-target-triple>   append `--target <triple>` (cross-compile)
+#   CRATE=<crate-name>            append `-p <crate>` (single-crate build)
+#
+# Example (CI aarch64-linux job, after downloading the web-ui-dist artifact):
+#   make build-daemon TARGET=aarch64-unknown-linux-gnu CRATE=wardnetd
+CARGO_TARGET_FLAG := $(if $(TARGET),--target $(TARGET),)
+CARGO_CRATE_FLAG  := $(if $(CRATE),-p $(CRATE),)
 
+build-daemon:
+	cd $(DAEMON_DIR) && cargo build --release $(CARGO_TARGET_FLAG) $(CARGO_CRATE_FLAG)
+
+# Convenience wrapper for local "build everything for the Pi in one shot":
+# builds the web UI first so the embedded assets are fresh, then cross-compiles
+# the daemon. CI skips this — it downloads the web-ui-dist artifact and calls
+# `build-daemon` directly with TARGET set.
 build-pi: build-web
-	cd $(DAEMON_DIR) && cargo build --release --target $(PI_TARGET) -p wardnetd
+	$(MAKE) build-daemon TARGET=$(PI_TARGET) CRATE=wardnetd
 
 check-daemon:
 	cd $(DAEMON_DIR) && cargo fmt --check
