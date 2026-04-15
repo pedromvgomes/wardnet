@@ -3,9 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use uuid::Uuid;
-use wardnet_types::api::{
-    ToggleDnsRequest, UpdateDnsConfigRequest, UpstreamDnsRequest,
-};
+use wardnet_types::api::{ToggleDnsRequest, UpdateDnsConfigRequest, UpstreamDnsRequest};
 use wardnet_types::auth::AuthContext;
 use wardnet_types::dns::{DnsProtocol, DnsResolutionMode};
 
@@ -222,12 +220,10 @@ async fn update_config_partial_update() {
 async fn toggle_enables_dns() {
     let svc = build_service();
 
-    let resp = auth_context::with_context(
-        admin_ctx(),
-        svc.toggle(ToggleDnsRequest { enabled: true }),
-    )
-    .await
-    .unwrap();
+    let resp =
+        auth_context::with_context(admin_ctx(), svc.toggle(ToggleDnsRequest { enabled: true }))
+            .await
+            .unwrap();
 
     assert!(resp.config.enabled);
 }
@@ -238,12 +234,10 @@ async fn toggle_disables_dns() {
     // Pre-enable DNS so we can disable it.
     repo.set("dns_enabled", "true").await.unwrap();
 
-    let resp = auth_context::with_context(
-        admin_ctx(),
-        svc.toggle(ToggleDnsRequest { enabled: false }),
-    )
-    .await
-    .unwrap();
+    let resp =
+        auth_context::with_context(admin_ctx(), svc.toggle(ToggleDnsRequest { enabled: false }))
+            .await
+            .unwrap();
 
     assert!(!resp.config.enabled);
 }
@@ -260,7 +254,7 @@ async fn status_returns_defaults() {
     assert!(!resp.running);
     assert_eq!(resp.cache_size, 0);
     assert_eq!(resp.cache_capacity, 10_000);
-    assert_eq!(resp.cache_hit_rate, 0.0);
+    assert!(resp.cache_hit_rate.abs() < f64::EPSILON);
 }
 
 #[tokio::test]

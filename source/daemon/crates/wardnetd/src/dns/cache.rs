@@ -44,10 +44,7 @@ impl DnsCache {
         let key = (domain.to_lowercase(), rtype);
 
         // Check if entry exists and is not expired.
-        let expired = self
-            .entries
-            .get(&key)
-            .map_or(true, CachedEntry::is_expired);
+        let expired = self.entries.get(&key).is_none_or(CachedEntry::is_expired);
 
         if expired {
             self.entries.remove(&key);
@@ -119,6 +116,7 @@ impl DnsCache {
 
     /// Cache hit rate as a fraction (0.0 to 1.0).
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {

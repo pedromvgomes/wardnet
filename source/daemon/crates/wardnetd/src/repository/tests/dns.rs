@@ -1,6 +1,6 @@
 use super::test_pool;
-use crate::repository::dns::{DnsRepository, QueryLogFilter, QueryLogRow};
 use crate::repository::SqliteDnsRepository;
+use crate::repository::dns::{DnsRepository, QueryLogFilter, QueryLogRow};
 use chrono::Utc;
 
 fn ts_now() -> String {

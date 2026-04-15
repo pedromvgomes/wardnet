@@ -56,14 +56,13 @@ impl DnsServiceImpl {
         let get = |key: &str| {
             let sc = Arc::clone(&self.system_config);
             let key = key.to_owned();
-            async move {
-                sc.get(&key)
-                    .await
-                    .map_err(AppError::Internal)
-            }
+            async move { sc.get(&key).await.map_err(AppError::Internal) }
         };
 
-        let enabled = get("dns_enabled").await?.unwrap_or_else(|| "false".to_owned()) == "true";
+        let enabled = get("dns_enabled")
+            .await?
+            .unwrap_or_else(|| "false".to_owned())
+            == "true";
 
         let resolution_mode = match get("dns_resolution_mode")
             .await?
@@ -77,22 +76,31 @@ impl DnsServiceImpl {
         let upstream_json = get("dns_upstream_servers")
             .await?
             .unwrap_or_else(|| "[]".to_owned());
-        let upstream_servers: Vec<UpstreamDns> = serde_json::from_str(&upstream_json)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("invalid dns_upstream_servers: {e}")))?;
+        let upstream_servers: Vec<UpstreamDns> =
+            serde_json::from_str(&upstream_json).map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("invalid dns_upstream_servers: {e}"))
+            })?;
 
         let cache_size = Self::parse_u32(get("dns_cache_size").await?, 10_000)?;
         let cache_ttl_min_secs = Self::parse_u32(get("dns_cache_ttl_min_secs").await?, 0)?;
         let cache_ttl_max_secs = Self::parse_u32(get("dns_cache_ttl_max_secs").await?, 86_400)?;
-        let dnssec_enabled =
-            get("dns_dnssec_enabled").await?.unwrap_or_else(|| "false".to_owned()) == "true";
-        let rebinding_protection =
-            get("dns_rebinding_protection").await?.unwrap_or_else(|| "true".to_owned()) == "true";
-        let rate_limit_per_second =
-            Self::parse_u32(get("dns_rate_limit_per_second").await?, 0)?;
-        let ad_blocking_enabled =
-            get("dns_ad_blocking_enabled").await?.unwrap_or_else(|| "true".to_owned()) == "true";
-        let query_log_enabled =
-            get("dns_query_log_enabled").await?.unwrap_or_else(|| "true".to_owned()) == "true";
+        let dnssec_enabled = get("dns_dnssec_enabled")
+            .await?
+            .unwrap_or_else(|| "false".to_owned())
+            == "true";
+        let rebinding_protection = get("dns_rebinding_protection")
+            .await?
+            .unwrap_or_else(|| "true".to_owned())
+            == "true";
+        let rate_limit_per_second = Self::parse_u32(get("dns_rate_limit_per_second").await?, 0)?;
+        let ad_blocking_enabled = get("dns_ad_blocking_enabled")
+            .await?
+            .unwrap_or_else(|| "true".to_owned())
+            == "true";
+        let query_log_enabled = get("dns_query_log_enabled")
+            .await?
+            .unwrap_or_else(|| "true".to_owned())
+            == "true";
         let query_log_retention_days =
             Self::parse_u32(get("dns_query_log_retention_days").await?, 7)?;
 
@@ -140,12 +148,15 @@ impl DnsService for DnsServiceImpl {
                 .map_err(AppError::Internal)?;
         }
         if let Some(ref servers) = req.upstream_servers {
-            let upstream: Vec<UpstreamDns> = servers.iter().map(|s| UpstreamDns {
-                address: s.address.clone(),
-                name: s.name.clone(),
-                protocol: s.protocol,
-                port: s.port,
-            }).collect();
+            let upstream: Vec<UpstreamDns> = servers
+                .iter()
+                .map(|s| UpstreamDns {
+                    address: s.address.clone(),
+                    name: s.name.clone(),
+                    protocol: s.protocol,
+                    port: s.port,
+                })
+                .collect();
             let json = serde_json::to_string(&upstream)
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("serialize upstreams: {e}")))?;
             self.system_config

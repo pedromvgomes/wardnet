@@ -29,7 +29,7 @@ use crate::service::auth::LoginResult;
 use crate::service::{AuthService, DhcpService};
 use crate::state::AppState;
 use crate::tests::stubs::{
-    StubDeviceService, StubDnsService, StubDiscoveryService, StubEventPublisher,
+    StubDeviceService, StubDiscoveryService, StubDnsService, StubEventPublisher,
     StubProviderService, StubRoutingService, StubSystemService, StubTunnelService,
 };
 

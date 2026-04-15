@@ -73,10 +73,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/dhcp/reservations/{id}", delete(dhcp::delete_reservation))
         .route("/dhcp/status", get(dhcp::status))
-        .route(
-            "/dns/config",
-            get(dns::get_config).put(dns::update_config),
-        )
+        .route("/dns/config", get(dns::get_config).put(dns::update_config))
         .route("/dns/config/toggle", post(dns::toggle))
         .route("/dns/status", get(dns::status))
         .route("/dns/cache/flush", post(dns::flush_cache));

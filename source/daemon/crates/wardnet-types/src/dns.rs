@@ -40,6 +40,7 @@ pub struct UpstreamDns {
 ///
 /// Persisted as individual keys in the `system_config` KV table,
 /// following the same pattern as [`crate::dhcp::DhcpConfig`].
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnsConfig {
     pub enabled: bool,

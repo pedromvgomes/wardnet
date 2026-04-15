@@ -25,7 +25,7 @@ use wardnet_types::routing::RoutingTarget;
 
 use crate::auth_context;
 use crate::tests::stubs::{
-    StubDeviceService, StubDhcpService, StubDnsService, StubDiscoveryService, StubEventPublisher,
+    StubDeviceService, StubDhcpService, StubDiscoveryService, StubDnsService, StubEventPublisher,
     StubProviderService, StubRoutingService, StubSystemService, StubTunnelService,
 };
 

@@ -95,10 +95,11 @@ async fn runner_loop(
                                     if let Err(e) = server.start().await {
                                         tracing::error!(error = %e, "failed to start DNS server after config change");
                                     }
-                                } else if !should_run && server.is_running() {
-                                    if let Err(e) = server.stop().await {
-                                        tracing::error!(error = %e, "failed to stop DNS server after config change");
-                                    }
+                                } else if !should_run
+                                    && server.is_running()
+                                    && let Err(e) = server.stop().await
+                                {
+                                    tracing::error!(error = %e, "failed to stop DNS server after config change");
                                 }
                             }
                             Err(e) => {

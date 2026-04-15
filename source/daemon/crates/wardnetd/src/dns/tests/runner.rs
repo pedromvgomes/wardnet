@@ -18,7 +18,7 @@ use crate::service::DnsService;
 // Mock DnsServer for runner tests
 // ---------------------------------------------------------------------------
 
-/// Mock server that tracks start/stop/update_config calls.
+/// Mock server that tracks `start`/`stop`/`update_config` calls.
 struct MockDnsServer {
     started: AtomicBool,
     start_count: AtomicU64,

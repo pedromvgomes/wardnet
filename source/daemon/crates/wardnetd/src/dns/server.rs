@@ -319,9 +319,8 @@ async fn handle_query(
     let id = request.id();
 
     // Extract the first question.
-    let question = match request.queries().first() {
-        Some(q) => q,
-        None => return Ok(()),
+    let Some(question) = request.queries().first() else {
+        return Ok(());
     };
 
     let domain = question.name().to_string();

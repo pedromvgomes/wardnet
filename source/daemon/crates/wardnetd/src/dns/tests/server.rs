@@ -120,17 +120,23 @@ async fn udp_server_update_config() {
     let server = UdpDnsServer::with_bind_addr(config, loopback_ephemeral());
 
     // Update the config before starting -- should not panic or error.
-    let mut new_config = DnsConfig::default();
-    new_config.cache_size = 5_000;
-    new_config.cache_ttl_max_secs = 3_600;
-    server.update_config(new_config).await;
+    server
+        .update_config(DnsConfig {
+            cache_size: 5_000,
+            cache_ttl_max_secs: 3_600,
+            ..DnsConfig::default()
+        })
+        .await;
 
     // Update while running should also succeed.
     server.start().await.unwrap();
 
-    let mut running_config = DnsConfig::default();
-    running_config.cache_size = 20_000;
-    server.update_config(running_config).await;
+    server
+        .update_config(DnsConfig {
+            cache_size: 20_000,
+            ..DnsConfig::default()
+        })
+        .await;
 
     server.stop().await.unwrap();
 }
@@ -139,8 +145,10 @@ async fn udp_server_update_config() {
 async fn build_resolver_with_empty_upstreams_uses_cloudflare() {
     // When upstream_servers is empty, the server should still start
     // successfully because `build_resolver` falls back to Cloudflare.
-    let mut config = DnsConfig::default();
-    config.upstream_servers = vec![];
+    let config = DnsConfig {
+        upstream_servers: vec![],
+        ..DnsConfig::default()
+    };
 
     let server = UdpDnsServer::with_bind_addr(config, loopback_ephemeral());
 
@@ -283,7 +291,8 @@ async fn wait_for_packets(socket: &MockDnsSocket, expected: usize) {
 #[tokio::test]
 async fn server_responds_to_query() {
     let socket = Arc::new(MockDnsSocket::new());
-    let server = UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
+    let server =
+        UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
 
     server.start().await.unwrap();
     assert!(server.is_running());
@@ -298,7 +307,11 @@ async fn server_responds_to_query() {
     assert!(!sent.is_empty(), "server should send a response");
 
     let (resp_bytes, resp_addr) = &sent[0];
-    assert_eq!(*resp_addr, client_addr(), "response should go back to client");
+    assert_eq!(
+        *resp_addr,
+        client_addr(),
+        "response should go back to client"
+    );
 
     let resp = Message::from_bytes(resp_bytes).expect("response should be valid DNS");
     assert_eq!(resp.id(), query_id, "response ID must match query ID");
@@ -317,7 +330,8 @@ async fn server_responds_to_query() {
 #[tokio::test]
 async fn server_handles_malformed_packet() {
     let socket = Arc::new(MockDnsSocket::new());
-    let server = UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
+    let server =
+        UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
 
     server.start().await.unwrap();
 
@@ -360,7 +374,8 @@ async fn server_handles_malformed_packet() {
 #[tokio::test]
 async fn server_processes_multiple_queries() {
     let socket = Arc::new(MockDnsSocket::new());
-    let server = UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
+    let server =
+        UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
 
     server.start().await.unwrap();
 
@@ -407,7 +422,8 @@ async fn server_processes_multiple_queries() {
 #[tokio::test]
 async fn server_cache_hit() {
     let socket = Arc::new(MockDnsSocket::new());
-    let server = UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
+    let server =
+        UdpDnsServer::with_socket(test_config(), Arc::clone(&socket) as Arc<dyn DnsSocket>);
 
     server.start().await.unwrap();
 

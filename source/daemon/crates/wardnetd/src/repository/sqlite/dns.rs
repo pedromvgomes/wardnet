@@ -116,7 +116,7 @@ impl DnsRepository for SqliteDnsRepository {
         }
 
         let count = query.fetch_one(&self.pool).await?;
-        Ok(count as u64)
+        Ok(u64::try_from(count).unwrap_or(0))
     }
 
     async fn cleanup_query_log(&self, retention_days: u32) -> anyhow::Result<u64> {

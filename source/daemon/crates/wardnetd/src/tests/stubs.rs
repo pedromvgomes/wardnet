@@ -357,9 +357,7 @@ pub struct StubDnsService;
 
 #[async_trait]
 impl crate::service::DnsService for StubDnsService {
-    async fn get_config(
-        &self,
-    ) -> Result<wardnet_types::api::DnsConfigResponse, AppError> {
+    async fn get_config(&self) -> Result<wardnet_types::api::DnsConfigResponse, AppError> {
         unimplemented!()
     }
     async fn update_config(
