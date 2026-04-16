@@ -124,6 +124,10 @@ impl RoutingService for MockRoutingService {
         Ok(())
     }
 
+    async fn handle_route_table_lost(&self, _table: u32) -> Result<(), AppError> {
+        Ok(())
+    }
+
     async fn devices_using_tunnel(&self, _tunnel_id: Uuid) -> Result<Vec<Uuid>, AppError> {
         Ok(Vec::new())
     }
@@ -309,6 +313,10 @@ impl RoutingService for FailingRoutingService {
     }
 
     async fn reconcile(&self) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn handle_route_table_lost(&self, _table: u32) -> Result<(), AppError> {
         Ok(())
     }
 
