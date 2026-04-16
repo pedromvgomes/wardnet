@@ -20,6 +20,8 @@ use crate::service::RoutingService;
 /// Records which methods were called so tests can assert dispatch behaviour.
 struct MockRoutingService {
     calls: Mutex<Vec<RoutingCall>>,
+    /// When `true`, `handle_route_table_lost` returns an error.
+    error_on_route_table_lost: Mutex<bool>,
 }
 
 /// Describes a single call made to the mock routing service.
@@ -54,6 +56,7 @@ impl MockRoutingService {
     fn new() -> Self {
         Self {
             calls: Mutex::new(Vec::new()),
+            error_on_route_table_lost: Mutex::new(false),
         }
     }
 
@@ -132,6 +135,11 @@ impl RoutingService for MockRoutingService {
             .lock()
             .unwrap()
             .push(RoutingCall::HandleRouteTableLost { table });
+        if *self.error_on_route_table_lost.lock().unwrap() {
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "mock: handle_route_table_lost forced error"
+            )));
+        }
         Ok(())
     }
 
@@ -929,6 +937,30 @@ async fn route_table_lost_triggers_handle_route_table_lost() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     listener.shutdown().await;
 
+    let calls = routing.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0], RoutingCall::HandleRouteTableLost { table: 100 });
+}
+
+#[tokio::test]
+async fn route_table_lost_error_does_not_panic() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing = Arc::new(MockRoutingService::new());
+    *routing.error_on_route_table_lost.lock().unwrap() = true;
+    let devices = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing.clone(), devices, &parent);
+
+    bus.publish(WardnetEvent::RouteTableLost {
+        table: 100,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+
+    // The call was dispatched even though it returned an error.
     let calls = routing.take_calls();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0], RoutingCall::HandleRouteTableLost { table: 100 });

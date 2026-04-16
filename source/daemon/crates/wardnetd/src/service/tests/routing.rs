@@ -254,6 +254,8 @@ struct MockNetlink {
     route_add_failures_remaining: Arc<Mutex<u32>>,
     /// What `has_route_table` returns. Defaults to `true`.
     has_route_table_result: Arc<Mutex<bool>>,
+    /// When `true`, `has_route_table` returns an error instead of the result.
+    has_route_table_error: Arc<Mutex<bool>>,
 }
 
 #[async_trait]
@@ -292,6 +294,9 @@ impl PolicyRouter for MockNetlink {
             .lock()
             .await
             .push(format!("has_route_table:{table}"));
+        if *self.has_route_table_error.lock().await {
+            anyhow::bail!("mock: has_route_table forced error");
+        }
         Ok(*self.has_route_table_result.lock().await)
     }
 
@@ -346,6 +351,8 @@ impl PolicyRouter for MockNetlink {
 /// Records all nftables calls for assertion.
 struct MockNftables {
     calls: Arc<Mutex<Vec<String>>>,
+    /// When `true`, `add_tcp_reset_reject` returns an error.
+    add_tcp_reset_reject_fail: Arc<Mutex<bool>>,
 }
 
 #[async_trait]
@@ -403,6 +410,9 @@ impl FirewallManager for MockNftables {
             .lock()
             .await
             .push(format!("add_tcp_reset_reject:{device_ip}"));
+        if *self.add_tcp_reset_reject_fail.lock().await {
+            anyhow::bail!("mock: add_tcp_reset_reject forced error");
+        }
         Ok(())
     }
 
@@ -442,6 +452,8 @@ struct TestSetup {
     bring_ups: Arc<Mutex<Vec<Uuid>>>,
     tear_downs: Arc<Mutex<Vec<Uuid>>>,
     has_route_table_result: Arc<Mutex<bool>>,
+    has_route_table_error: Arc<Mutex<bool>>,
+    add_tcp_reset_reject_fail: Arc<Mutex<bool>>,
 }
 
 fn device_id_1() -> Uuid {
@@ -540,6 +552,8 @@ fn setup_with_devices_and_tunnel(
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
     let has_route_table_result = Arc::new(Mutex::new(true));
+    let has_route_table_error = Arc::new(Mutex::new(false));
+    let add_tcp_reset_reject_fail = Arc::new(Mutex::new(false));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo { devices, rules });
     let tunnel_repo: Arc<dyn TunnelRepository> = Arc::new(MockTunnelRepo {
@@ -555,9 +569,11 @@ fn setup_with_devices_and_tunnel(
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
         has_route_table_result: has_route_table_result.clone(),
+        has_route_table_error: has_route_table_error.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
+        add_tcp_reset_reject_fail: add_tcp_reset_reject_fail.clone(),
     });
 
     let routing = RoutingServiceImpl::new(
@@ -577,6 +593,8 @@ fn setup_with_devices_and_tunnel(
         bring_ups,
         tear_downs,
         has_route_table_result,
+        has_route_table_error,
+        add_tcp_reset_reject_fail,
     }
 }
 
@@ -593,6 +611,8 @@ fn setup_with_orphaned_rules(
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
     let has_route_table_result = Arc::new(Mutex::new(true));
+    let has_route_table_error = Arc::new(Mutex::new(false));
+    let add_tcp_reset_reject_fail = Arc::new(Mutex::new(false));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo { devices, rules });
     let tunnel_repo: Arc<dyn TunnelRepository> = Arc::new(MockTunnelRepo {
@@ -608,9 +628,11 @@ fn setup_with_orphaned_rules(
         wardnet_rules: kernel_rules,
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
         has_route_table_result: has_route_table_result.clone(),
+        has_route_table_error: has_route_table_error.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
+        add_tcp_reset_reject_fail: add_tcp_reset_reject_fail.clone(),
     });
 
     let routing = RoutingServiceImpl::new(
@@ -630,6 +652,8 @@ fn setup_with_orphaned_rules(
         bring_ups,
         tear_downs,
         has_route_table_result,
+        has_route_table_error,
+        add_tcp_reset_reject_fail,
     }
 }
 
@@ -641,6 +665,8 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
     let has_route_table_result = Arc::new(Mutex::new(true));
+    let has_route_table_error = Arc::new(Mutex::new(false));
+    let add_tcp_reset_reject_fail = Arc::new(Mutex::new(false));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo {
         devices: vec![],
@@ -659,9 +685,11 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(failures)),
         has_route_table_result: has_route_table_result.clone(),
+        has_route_table_error: has_route_table_error.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
+        add_tcp_reset_reject_fail: add_tcp_reset_reject_fail.clone(),
     });
 
     let routing = RoutingServiceImpl::new(
@@ -681,6 +709,8 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         bring_ups,
         tear_downs,
         has_route_table_result,
+        has_route_table_error,
+        add_tcp_reset_reject_fail,
     }
 }
 
@@ -1563,5 +1593,106 @@ async fn handle_route_table_lost_re_applies_rules() {
     assert!(
         nl.contains(&"add_ip_rule:192.168.1.10:100".to_owned()),
         "expected ip rule to be re-applied: {nl:?}"
+    );
+}
+
+#[tokio::test]
+async fn handle_route_table_lost_noop_when_no_devices_affected() {
+    let ts = setup();
+
+    // No devices have been routed through any table, so table 200 has no
+    // affected devices. The call should return Ok without any netlink calls.
+    as_admin(ts.routing.handle_route_table_lost(200))
+        .await
+        .unwrap();
+
+    // No ip rule or route table calls should have been made.
+    let nl = ts.netlink_calls.lock().await;
+    let rule_adds: Vec<_> = nl
+        .iter()
+        .filter(|c| c.starts_with("add_ip_rule:") || c.starts_with("add_route_table:"))
+        .collect();
+    assert!(
+        rule_adds.is_empty(),
+        "expected no routing calls for unaffected table: {rule_adds:?}"
+    );
+}
+
+#[tokio::test]
+async fn ensure_tunnel_table_re_adds_route_when_has_route_table_errors() {
+    let ts = setup();
+    let target = RoutingTarget::Tunnel {
+        tunnel_id: tunnel_id_1(),
+    };
+
+    // First apply — sets up the tunnel table normally.
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_1(), "192.168.1.10", &target),
+    )
+    .await
+    .unwrap();
+
+    // Make has_route_table return an error (simulates netlink failure).
+    *ts.has_route_table_error.lock().await = true;
+    ts.netlink_calls.lock().await.clear();
+    ts.nftables_calls.lock().await.clear();
+
+    // Apply for device 2 — ensure_tunnel_table should hit the Err branch
+    // and re-add the route defensively.
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_2(), "192.168.1.11", &target),
+    )
+    .await
+    .unwrap();
+
+    let nl = ts.netlink_calls.lock().await;
+    assert!(
+        nl.contains(&"has_route_table:100".to_owned()),
+        "expected kernel route check: {nl:?}"
+    );
+    assert!(
+        nl.iter()
+            .any(|c| c.starts_with("add_route_table:wg_ward0:100")),
+        "expected route to be re-added after has_route_table error: {nl:?}"
+    );
+}
+
+#[tokio::test]
+async fn flush_stale_connections_skips_remove_when_add_rst_fails() {
+    let ts = setup();
+    let target = RoutingTarget::Tunnel {
+        tunnel_id: tunnel_id_1(),
+    };
+
+    // Make add_tcp_reset_reject fail.
+    *ts.add_tcp_reset_reject_fail.lock().await = true;
+
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_1(), "192.168.1.10", &target),
+    )
+    .await
+    .unwrap();
+
+    let nf = ts.nftables_calls.lock().await;
+
+    // The add was attempted (and failed).
+    assert!(
+        nf.contains(&"add_tcp_reset_reject:192.168.1.10".to_owned()),
+        "expected TCP RST add attempt: {nf:?}"
+    );
+    // Remove should NOT be called since add failed (rst_added = false).
+    assert!(
+        !nf.contains(&"remove_tcp_reset_reject:192.168.1.10".to_owned()),
+        "expected no TCP RST remove when add failed: {nf:?}"
+    );
+
+    // Conntrack flush should still happen (it's independent).
+    let nl = ts.netlink_calls.lock().await;
+    assert!(
+        nl.contains(&"flush_conntrack:192.168.1.10".to_owned()),
+        "expected conntrack flush even when RST add failed: {nl:?}"
     );
 }
