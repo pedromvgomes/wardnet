@@ -441,6 +441,7 @@ struct TestSetup {
     nftables_calls: Arc<Mutex<Vec<String>>>,
     bring_ups: Arc<Mutex<Vec<Uuid>>>,
     tear_downs: Arc<Mutex<Vec<Uuid>>>,
+    has_route_table_result: Arc<Mutex<bool>>,
 }
 
 fn device_id_1() -> Uuid {
@@ -538,6 +539,7 @@ fn setup_with_devices_and_tunnel(
     let nftables_calls = Arc::new(Mutex::new(Vec::new()));
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
+    let has_route_table_result = Arc::new(Mutex::new(true));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo { devices, rules });
     let tunnel_repo: Arc<dyn TunnelRepository> = Arc::new(MockTunnelRepo {
@@ -552,7 +554,7 @@ fn setup_with_devices_and_tunnel(
         calls: netlink_calls.clone(),
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
-        has_route_table_result: Arc::new(Mutex::new(true)),
+        has_route_table_result: has_route_table_result.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -574,6 +576,7 @@ fn setup_with_devices_and_tunnel(
         nftables_calls,
         bring_ups,
         tear_downs,
+        has_route_table_result,
     }
 }
 
@@ -589,6 +592,7 @@ fn setup_with_orphaned_rules(
     let nftables_calls = Arc::new(Mutex::new(Vec::new()));
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
+    let has_route_table_result = Arc::new(Mutex::new(true));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo { devices, rules });
     let tunnel_repo: Arc<dyn TunnelRepository> = Arc::new(MockTunnelRepo {
@@ -603,7 +607,7 @@ fn setup_with_orphaned_rules(
         calls: netlink_calls.clone(),
         wardnet_rules: kernel_rules,
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
-        has_route_table_result: Arc::new(Mutex::new(true)),
+        has_route_table_result: has_route_table_result.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -625,6 +629,7 @@ fn setup_with_orphaned_rules(
         nftables_calls,
         bring_ups,
         tear_downs,
+        has_route_table_result,
     }
 }
 
@@ -635,6 +640,7 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
     let nftables_calls = Arc::new(Mutex::new(Vec::new()));
     let bring_ups = Arc::new(Mutex::new(Vec::new()));
     let tear_downs = Arc::new(Mutex::new(Vec::new()));
+    let has_route_table_result = Arc::new(Mutex::new(true));
 
     let device_repo: Arc<dyn DeviceRepository> = Arc::new(MockDeviceRepo {
         devices: vec![],
@@ -652,7 +658,7 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         calls: netlink_calls.clone(),
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(failures)),
-        has_route_table_result: Arc::new(Mutex::new(true)),
+        has_route_table_result: has_route_table_result.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -674,6 +680,7 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         nftables_calls,
         bring_ups,
         tear_downs,
+        has_route_table_result,
     }
 }
 
@@ -1407,17 +1414,11 @@ async fn ensure_tunnel_table_re_adds_when_kernel_route_missing() {
     .await
     .unwrap();
 
-    // Simulate kernel route disappearing by setting has_route_table to false.
-    // The mock was constructed with Arc<Mutex<bool>> set to true, but we need
-    // access to that inner value. Since our mock always returns the same value,
-    // let's clear calls and apply again with a different device to trigger
-    // ensure_tunnel_table for the same table.
     ts.netlink_calls.lock().await.clear();
     ts.nftables_calls.lock().await.clear();
 
-    // Apply for device 2 — ensure_tunnel_table should find table 100 in the
-    // in-memory set and verify it with has_route_table (returns true), so it
-    // skips re-adding.
+    // Apply for device 2 — ensure_tunnel_table verifies the kernel route
+    // (returns true) and skips re-adding.
     as_admin(
         ts.routing
             .apply_rule(device_id_2(), "192.168.1.11", &target),
@@ -1430,7 +1431,6 @@ async fn ensure_tunnel_table_re_adds_when_kernel_route_missing() {
         nl.contains(&"has_route_table:100".to_owned()),
         "expected kernel route verification: {nl:?}"
     );
-    // Since has_route_table returns true, add_route_table should NOT be called.
     let route_adds = nl
         .iter()
         .filter(|c| c.starts_with("add_route_table:"))
@@ -1438,6 +1438,47 @@ async fn ensure_tunnel_table_re_adds_when_kernel_route_missing() {
     assert_eq!(
         route_adds, 0,
         "should not re-add route when kernel route exists: {nl:?}"
+    );
+}
+
+#[tokio::test]
+async fn ensure_tunnel_table_re_adds_route_when_kernel_says_missing() {
+    let ts = setup();
+    let target = RoutingTarget::Tunnel {
+        tunnel_id: tunnel_id_1(),
+    };
+
+    // First apply — sets up the tunnel table normally.
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_1(), "192.168.1.10", &target),
+    )
+    .await
+    .unwrap();
+
+    // Simulate kernel route vanishing: flip has_route_table to false.
+    *ts.has_route_table_result.lock().await = false;
+    ts.netlink_calls.lock().await.clear();
+    ts.nftables_calls.lock().await.clear();
+
+    // Apply for device 2 — ensure_tunnel_table should detect the missing
+    // route and re-add it.
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_2(), "192.168.1.11", &target),
+    )
+    .await
+    .unwrap();
+
+    let nl = ts.netlink_calls.lock().await;
+    assert!(
+        nl.contains(&"has_route_table:100".to_owned()),
+        "expected kernel route check: {nl:?}"
+    );
+    assert!(
+        nl.iter()
+            .any(|c| c.starts_with("add_route_table:wg_ward0:100")),
+        "expected route to be re-added after kernel reports missing: {nl:?}"
     );
 }
 

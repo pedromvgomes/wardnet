@@ -45,6 +45,9 @@ enum RoutingCall {
     HandleTunnelDown {
         tunnel_id: Uuid,
     },
+    HandleRouteTableLost {
+        table: u32,
+    },
 }
 
 impl MockRoutingService {
@@ -124,7 +127,11 @@ impl RoutingService for MockRoutingService {
         Ok(())
     }
 
-    async fn handle_route_table_lost(&self, _table: u32) -> Result<(), AppError> {
+    async fn handle_route_table_lost(&self, table: u32) -> Result<(), AppError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(RoutingCall::HandleRouteTableLost { table });
         Ok(())
     }
 
@@ -903,4 +910,26 @@ async fn routing_rule_changed_device_not_found_does_not_panic() {
         calls.is_empty(),
         "no routing calls expected when device not found"
     );
+}
+
+#[tokio::test]
+async fn route_table_lost_triggers_handle_route_table_lost() {
+    let bus: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(16));
+    let routing = Arc::new(MockRoutingService::new());
+    let devices = Arc::new(MockDeviceRepo::empty());
+
+    let parent = tracing::info_span!("test");
+    let listener = RoutingListener::start(&bus, routing.clone(), devices, &parent);
+
+    bus.publish(WardnetEvent::RouteTableLost {
+        table: 100,
+        timestamp: Utc::now(),
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    listener.shutdown().await;
+
+    let calls = routing.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0], RoutingCall::HandleRouteTableLost { table: 100 });
 }
