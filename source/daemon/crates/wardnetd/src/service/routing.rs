@@ -1090,7 +1090,8 @@ impl RoutingService for RoutingServiceImpl {
             return Ok(());
         }
 
-        // Collect their current targets so we can re-apply after releasing the lock.
+        // Collect targets then remove from applied so apply_rule doesn't
+        // skip them via its idempotency check (same target+IP = no-op).
         let re_apply: Vec<(Uuid, String, RoutingTarget)> = affected
             .iter()
             .filter_map(|(id, _)| {
@@ -1100,6 +1101,9 @@ impl RoutingService for RoutingServiceImpl {
                     .map(|r| (*id, r.device_ip.clone(), r.target.clone()))
             })
             .collect();
+        for (id, _) in &affected {
+            state.applied.remove(id);
+        }
 
         drop(state);
 
