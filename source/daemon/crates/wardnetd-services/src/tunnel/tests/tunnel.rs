@@ -203,12 +203,23 @@ impl KeyStore for MockKeyStore {
 
 // -- Mock TunnelInterface -------------------------------------------------
 
+/// Programmable outcome for `get_stats` calls, used by the stats/health tests.
+enum StatsBehavior {
+    /// Default: return `Ok(None)` (interface not found).
+    None,
+    /// Return `Ok(Some(stats))` where stats is cloned from the inner value.
+    Some(TunnelStats),
+    /// Return `Err(...)`.
+    Err,
+}
+
 /// Records calls to tunnel interface operations for assertion.
 struct MockTunnelInterface {
     created: Mutex<Vec<String>>,
     brought_up: Mutex<Vec<String>>,
     torn_down: Mutex<Vec<String>>,
     removed: Mutex<Vec<String>>,
+    stats_behavior: Mutex<StatsBehavior>,
 }
 
 impl MockTunnelInterface {
@@ -218,7 +229,16 @@ impl MockTunnelInterface {
             brought_up: Mutex::new(Vec::new()),
             torn_down: Mutex::new(Vec::new()),
             removed: Mutex::new(Vec::new()),
+            stats_behavior: Mutex::new(StatsBehavior::None),
         }
+    }
+
+    fn set_stats(&self, stats: TunnelStats) {
+        *self.stats_behavior.lock().unwrap() = StatsBehavior::Some(stats);
+    }
+
+    fn set_stats_error(&self) {
+        *self.stats_behavior.lock().unwrap() = StatsBehavior::Err;
     }
 }
 
@@ -251,7 +271,11 @@ impl TunnelInterface for MockTunnelInterface {
     }
 
     async fn get_stats(&self, _interface_name: &str) -> anyhow::Result<Option<TunnelStats>> {
-        Ok(None)
+        match &*self.stats_behavior.lock().unwrap() {
+            StatsBehavior::None => Ok(None),
+            StatsBehavior::Some(s) => Ok(Some(s.clone())),
+            StatsBehavior::Err => Err(anyhow::anyhow!("stats unavailable")),
+        }
     }
 
     async fn list(&self) -> anyhow::Result<Vec<String>> {
@@ -988,4 +1012,263 @@ async fn restore_tunnels_empty_db_succeeds() {
 
     assert!(h.tunnel_iface.created.lock().unwrap().is_empty());
     assert!(h.tunnel_iface.brought_up.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn collect_stats_updates_stats_and_publishes_event() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    // Bring the tunnel up so `collect_stats` picks it up.
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+    h.events.events.lock().unwrap().clear();
+
+    // Stub the interface to return real stats on `get_stats`.
+    let handshake = chrono::Utc::now() - chrono::Duration::seconds(30);
+    h.tunnel_iface.set_stats(TunnelStats {
+        bytes_tx: 1024,
+        bytes_rx: 2048,
+        last_handshake: Some(handshake),
+    });
+
+    h.svc.collect_stats().await.unwrap();
+
+    let events = h.events.published_events();
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            WardnetEvent::TunnelStatsUpdated {
+                tunnel_id, bytes_tx, bytes_rx, ..
+            } if *tunnel_id == id && *bytes_tx == 1024 && *bytes_rx == 2048
+        )),
+        "expected TunnelStatsUpdated event"
+    );
+}
+
+#[tokio::test]
+async fn collect_stats_skips_when_stats_none() {
+    // Default stats_behavior is `None` → the `continue` branch is hit.
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+    h.events.events.lock().unwrap().clear();
+
+    h.svc.collect_stats().await.unwrap();
+
+    // No stats updates emitted because get_stats returned None.
+    let events = h.events.published_events();
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e, WardnetEvent::TunnelStatsUpdated { .. })),
+        "no stats event expected when get_stats is None"
+    );
+}
+
+#[tokio::test]
+async fn collect_stats_swallows_interface_error() {
+    // When `get_stats` returns an error, `collect_stats` logs and continues
+    // without failing overall.
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+    h.tunnel_iface.set_stats_error();
+
+    // Should not return an error; the per-tunnel error is logged and skipped.
+    h.svc.collect_stats().await.unwrap();
+}
+
+#[tokio::test]
+async fn collect_stats_ignores_down_tunnels() {
+    // Tunnel is never brought up → `collect_stats` filters it out.
+    let h = build_harness();
+    auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+
+    // Should be a no-op: no stats event emitted.
+    h.svc.collect_stats().await.unwrap();
+    let events = h.events.published_events();
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e, WardnetEvent::TunnelStatsUpdated { .. })),
+        "down tunnels should be skipped"
+    );
+}
+
+#[tokio::test]
+async fn run_health_check_warns_on_stale_handshake() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+
+    // Simulate a stale handshake (>3 minutes old).
+    let stale = chrono::Utc::now() - chrono::Duration::minutes(10);
+    h.tunnel_iface.set_stats(TunnelStats {
+        bytes_tx: 0,
+        bytes_rx: 0,
+        last_handshake: Some(stale),
+    });
+
+    // Should succeed regardless — the staleness is only logged.
+    h.svc.run_health_check().await.unwrap();
+}
+
+#[tokio::test]
+async fn run_health_check_fresh_handshake_succeeds() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+
+    let fresh = chrono::Utc::now() - chrono::Duration::seconds(10);
+    h.tunnel_iface.set_stats(TunnelStats {
+        bytes_tx: 0,
+        bytes_rx: 0,
+        last_handshake: Some(fresh),
+    });
+
+    h.svc.run_health_check().await.unwrap();
+}
+
+#[tokio::test]
+async fn run_health_check_missing_interface_logs_and_returns_ok() {
+    // `get_stats` returning None triggers the "interface removed externally"
+    // error log path but health check overall returns Ok.
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+    // Default stats_behavior (None) triggers the missing-interface branch.
+
+    h.svc.run_health_check().await.unwrap();
+}
+
+#[tokio::test]
+async fn run_health_check_stats_error_logs_and_returns_ok() {
+    let h = build_harness();
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(sample_request()))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+    h.tunnel_iface.set_stats_error();
+
+    h.svc.run_health_check().await.unwrap();
+}
+
+#[tokio::test]
+async fn run_health_check_no_up_tunnels_is_noop() {
+    let h = build_harness();
+    // No tunnels brought up; run_health_check iterates over an empty list.
+    h.svc.run_health_check().await.unwrap();
+}
+
+const SAMPLE_CONF_WITH_PRESHARED: &str = "\
+[Interface]
+PrivateKey = YNqHbfBQKaGvzefSSbufuZKjTIHQadqIyERi1V562lY=
+Address = 10.66.0.2/32
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = Uf0bMmMFBJbOQtYp3iByaIT5jlQDGHUBk4bH8WDAiUk=
+PresharedKey = Uf0bMmMFBJbOQtYp3iByaIT5jlQDGHUBk4bH8WDAiUk=
+Endpoint = 198.51.100.2:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+";
+
+const SAMPLE_CONF_NO_ENDPOINT: &str = "\
+[Interface]
+PrivateKey = YNqHbfBQKaGvzefSSbufuZKjTIHQadqIyERi1V562lY=
+Address = 10.66.0.2/32
+ListenPort = 51820
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = Uf0bMmMFBJbOQtYp3iByaIT5jlQDGHUBk4bH8WDAiUk=
+AllowedIPs = 10.0.0.0/8
+";
+
+#[tokio::test]
+async fn bring_up_with_no_endpoint_uses_none_branch() {
+    // Config without an `Endpoint = ...` line should hit the `None` match
+    // arm of peer endpoint parsing in bring_up_core.
+    let h = build_harness();
+    let req = CreateTunnelRequest {
+        label: "Listen-only".to_owned(),
+        country_code: "SE".to_owned(),
+        provider: None,
+        config: SAMPLE_CONF_NO_ENDPOINT.to_owned(),
+    };
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(req))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+
+    assert_eq!(h.tunnel_iface.brought_up.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn bring_up_with_preshared_key_and_multiple_allowed_ips() {
+    // Exercises the preshared-key decode branch and multi-allowed-IP parsing.
+    let h = build_harness();
+    let req = CreateTunnelRequest {
+        label: "Preshared".to_owned(),
+        country_code: "NO".to_owned(),
+        provider: None,
+        config: SAMPLE_CONF_WITH_PRESHARED.to_owned(),
+    };
+    let resp = auth_context::with_context(admin_ctx(), h.svc.import_tunnel(req))
+        .await
+        .unwrap();
+    let id = resp.tunnel.id;
+
+    auth_context::with_context(admin_ctx(), h.svc.bring_up(id))
+        .await
+        .unwrap();
+
+    assert_eq!(h.tunnel_iface.created.lock().unwrap().len(), 1);
+    assert_eq!(h.tunnel_iface.brought_up.lock().unwrap().len(), 1);
 }

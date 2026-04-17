@@ -286,3 +286,56 @@ async fn inactive_service_ignores_events() {
     tracing::error!("should not be captured");
     assert!(svc.get_recent_errors().is_empty());
 }
+
+#[derive(Debug)]
+struct DebuggableError;
+
+#[tokio::test]
+async fn layer_records_non_message_fields_via_debug_visitor() {
+    // A structured field with Debug formatting (not str) on a non-"message"
+    // name exercises the `record_debug` path for the field-name != "message"
+    // branch. The field itself is ignored by the notifier but the visitor is
+    // invoked.
+    let svc = started_service(15);
+    let subscriber = tracing_subscriber::registry().with(svc.tracing_layer());
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    tracing::error!(error = ?DebuggableError, "captured");
+
+    let entries = svc.get_recent_errors();
+    assert_eq!(entries.len(), 1);
+    // The entry's message should still contain the "captured" literal.
+    assert!(entries[0].message.contains("captured"));
+}
+
+#[tokio::test]
+async fn layer_records_str_field_non_message() {
+    // Structured str field whose name is not `message` hits the
+    // field.name() != "message" branch of `record_str`.
+    let svc = started_service(15);
+    let subscriber = tracing_subscriber::registry().with(svc.tracing_layer());
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    tracing::error!(key = "value", "event body");
+
+    let entries = svc.get_recent_errors();
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].message.contains("event body"));
+}
+
+#[tokio::test]
+async fn stopped_service_after_start_drops_events() {
+    // start() then stop(): events after stop should not be captured.
+    let svc = started_service(15);
+    let subscriber = tracing_subscriber::registry().with(svc.tracing_layer());
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    tracing::error!("before stop");
+    svc.stop();
+    tracing::error!("after stop");
+
+    let entries = svc.get_recent_errors();
+    // Exactly one event was captured (the one before stop()).
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].message.contains("before stop"));
+}

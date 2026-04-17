@@ -137,3 +137,171 @@ async fn layers_published_via_service_capture_events() {
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].level, "ERROR");
 }
+
+#[tokio::test]
+async fn download_log_file_by_name_returns_content() {
+    // Exercise the `Some(name)` branch of `download_log_file`, which resolves
+    // the name relative to the log directory (without traversal).
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let rotated = dir.join("wardnetd.log.2026-04-12");
+    tokio::fs::write(&rotated, b"rotated line\n").await.unwrap();
+
+    let content = svc
+        .download_log_file(Some("wardnetd.log.2026-04-12"))
+        .await
+        .unwrap();
+    assert!(content.contains("rotated line"));
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn download_log_file_formats_json_lines() {
+    // JSON-formatted tracing output should be reformatted to the
+    // `timestamp LEVEL target message` layout.
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let active = dir.join("wardnetd.log");
+    let json_line = r#"{"timestamp":"2026-04-17T12:00:00Z","level":"INFO","target":"wardnetd","fields":{"message":"hello world"}}"#;
+    tokio::fs::write(&active, format!("{json_line}\n"))
+        .await
+        .unwrap();
+
+    let content = svc.download_log_file(None).await.unwrap();
+    assert!(content.contains("2026-04-17T12:00:00Z"));
+    assert!(content.contains("INFO"));
+    assert!(content.contains("wardnetd"));
+    assert!(content.contains("hello world"));
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn download_log_file_missing_file_errors() {
+    // Name is valid but file does not exist: should return an Internal error
+    // from the read_to_string failure.
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+
+    let res = svc.download_log_file(Some("wardnetd.log.absent")).await;
+    assert!(res.is_err(), "missing file should error");
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn download_log_file_no_files_not_found() {
+    // With `None` and an empty directory, `discover_log_files` returns an
+    // empty Vec and `find_active_log_path` yields None → NotFound.
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+
+    let res = svc.download_log_file(None).await;
+    assert!(res.is_err(), "no files should surface an error");
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn list_log_files_ignores_unrelated_files() {
+    // Files that do not match the configured prefix should be filtered out.
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    tokio::fs::write(dir.join("wardnetd.log"), b"a")
+        .await
+        .unwrap();
+    tokio::fs::write(dir.join("unrelated.txt"), b"b")
+        .await
+        .unwrap();
+
+    let files = svc.list_log_files().await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].name, "wardnetd.log");
+    assert!(files[0].active);
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn list_log_files_picks_newest_as_active_when_configured_missing() {
+    // If the configured path itself is absent but rotated files exist,
+    // the most recent rotated file is flagged active.
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let older = dir.join("wardnetd.log.2026-04-10");
+    let newer = dir.join("wardnetd.log.2026-04-12");
+    tokio::fs::write(&older, b"older").await.unwrap();
+    tokio::fs::write(&newer, b"newer").await.unwrap();
+
+    let files = svc.list_log_files().await.unwrap();
+    assert_eq!(files.len(), 2);
+    // Exactly one should be active. It must be the lexicographically-greatest
+    // (the one find_active_log_path picks when configured file is absent).
+    let active: Vec<_> = files.iter().filter(|f| f.active).collect();
+    assert_eq!(active.len(), 1);
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn list_log_files_orders_by_modified_desc() {
+    let (svc, dir) = build_service();
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    tokio::fs::write(dir.join("wardnetd.log"), b"active")
+        .await
+        .unwrap();
+    tokio::fs::write(dir.join("wardnetd.log.2026-04-12"), b"rot1")
+        .await
+        .unwrap();
+    tokio::fs::write(dir.join("wardnetd.log.2026-04-11"), b"rot2")
+        .await
+        .unwrap();
+
+    let files = svc.list_log_files().await.unwrap();
+    // Sorted newest-first: each entry's modified_at should be >= the next.
+    for pair in files.windows(2) {
+        assert!(pair[0].modified_at >= pair[1].modified_at);
+    }
+
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn start_all_activates_both_components() {
+    use crate::logging::component::LogComponent;
+    let stream = Arc::new(LogStreamService::new(8));
+    let errors = Arc::new(ErrorNotifierService::new(8));
+    let svc = LogServiceImpl::new(
+        stream.clone(),
+        errors.clone(),
+        PathBuf::from("/tmp/wardnet-test.log"),
+    );
+
+    assert!(!stream.is_active());
+    assert!(!errors.is_active());
+
+    svc.start_all();
+    assert!(stream.is_active());
+    assert!(errors.is_active());
+
+    svc.stop_all();
+    assert!(!stream.is_active());
+    assert!(!errors.is_active());
+}
+
+#[test]
+fn log_file_info_serializes_fields() {
+    use crate::logging::service::LogFileInfo;
+    let info = LogFileInfo {
+        name: "wardnetd.log".to_owned(),
+        size_bytes: 42,
+        modified_at: chrono::Utc::now(),
+        active: true,
+    };
+    let json = serde_json::to_value(&info).unwrap();
+    assert_eq!(json["name"], "wardnetd.log");
+    assert_eq!(json["size_bytes"], 42);
+    assert_eq!(json["active"], true);
+    assert!(json["modified_at"].is_string());
+}

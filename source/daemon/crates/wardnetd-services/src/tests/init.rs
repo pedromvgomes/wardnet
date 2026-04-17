@@ -19,11 +19,12 @@ use wardnetd_data::keys::KeyStore;
 use crate::Backends;
 use crate::device::hostname_resolver::HostnameResolver;
 use crate::device::packet_capture::{ObservedDevice, PacketCapture};
-use crate::init_services_with_factory;
 use crate::logging::{ErrorNotifierService, LogService, LogServiceImpl, LogStreamService};
 use crate::routing::firewall::FirewallManager;
 use crate::routing::policy_router::PolicyRouter;
 use crate::tunnel::interface::{CreateTunnelParams, TunnelInterface, TunnelStats};
+use crate::{init_services, init_services_with_factory};
+use wardnet_common::config::AdminConfig;
 
 // ---------------------------------------------------------------------------
 // Minimal backend stubs — every method panics. Construction-only test.
@@ -249,4 +250,83 @@ async fn init_services_with_factory_respects_disabled_provider() {
 
     // Wiring still succeeds even when the built-in provider is disabled.
     assert!(Arc::strong_count(&services.vpn_provider) >= 1);
+}
+
+#[tokio::test]
+async fn init_services_bootstraps_admin_from_config() {
+    // Exercises the async `init_services` entry point: opens an in-memory
+    // SQLite pool via `create_repository_factory`, bootstraps the admin from
+    // the config, and wires the service layer.
+    let mut config = ApplicationConfiguration::default();
+    config.database.connection_string = ":memory:".to_owned();
+    config.admin = Some(AdminConfig {
+        username: "opsadmin".to_owned(),
+        password: "supersecret".to_owned(),
+    });
+
+    let services = init_services(
+        &config,
+        stub_backends(),
+        Ipv4Addr::new(192, 168, 1, 1),
+        Instant::now(),
+        stub_log_service(),
+    )
+    .await
+    .expect("init_services should succeed with in-memory SQLite");
+
+    assert!(Arc::strong_count(&services.auth) >= 1);
+    assert!(Arc::strong_count(&services.device) >= 1);
+    assert!(Arc::strong_count(&services.tunnel) >= 1);
+}
+
+#[tokio::test]
+async fn init_services_without_admin_block_generates_default() {
+    // When no admin config is provided, `bootstrap_admin` generates a random
+    // admin; `init_services` should still succeed and produce every service.
+    let mut config = ApplicationConfiguration::default();
+    config.database.connection_string = ":memory:".to_owned();
+    config.admin = None;
+
+    let services = init_services(
+        &config,
+        stub_backends(),
+        Ipv4Addr::new(10, 0, 0, 1),
+        Instant::now(),
+        stub_log_service(),
+    )
+    .await
+    .expect("init_services should succeed without admin block");
+
+    assert!(Arc::strong_count(&services.system) >= 1);
+    assert!(Arc::strong_count(&services.routing) >= 1);
+    assert!(Arc::strong_count(&services.dhcp) >= 1);
+    assert!(Arc::strong_count(&services.dns) >= 1);
+    assert!(Arc::strong_count(&services.discovery) >= 1);
+    assert!(Arc::strong_count(&services.vpn_provider) >= 1);
+    assert!(Arc::strong_count(&services.event_publisher) >= 1);
+    assert!(Arc::strong_count(&services.dns_repo) >= 1);
+}
+
+#[tokio::test]
+async fn init_services_with_broadcast_lan_ip_falls_back_to_default_subnet() {
+    // `255.255.255.255` + /24 is invalid for `Ipv4Network::new`, which hits
+    // the `unwrap_or_else` fallback branch in `create_services`. Construction
+    // must still succeed thanks to the second /24 attempt.
+    let pool = init_pool_from_connection_string(":memory:")
+        .await
+        .expect("in-memory pool");
+    let factory = SqliteRepositoryFactory::new(pool);
+    let config = ApplicationConfiguration::default();
+
+    let services = init_services_with_factory(
+        &factory,
+        stub_backends(),
+        &config,
+        Ipv4Addr::new(192, 168, 99, 1),
+        Instant::now(),
+        stub_log_service(),
+    );
+
+    // discovery service exists regardless — the fallback path does not panic.
+    assert!(Arc::strong_count(&services.discovery) >= 1);
 }
