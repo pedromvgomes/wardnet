@@ -211,14 +211,40 @@ impl RoutingServiceImpl {
                 tracing::debug!(
                     device_ip = %rule.device_ip,
                     table,
-                    "removing ip rule"
+                    "removing ip rule for device {device_ip}, table={table}",
+                    device_ip = rule.device_ip,
+                    table = table
                 );
-                if let Err(e) = self.netlink.remove_ip_rule(&rule.device_ip, table).await {
+                // Loop until the kernel reports no matching rule, clearing any
+                // duplicates that accumulated from restarts or races (issue #78).
+                let mut removed = 0u32;
+                loop {
+                    match self.netlink.remove_ip_rule(&rule.device_ip, table).await {
+                        Ok(()) => removed += 1,
+                        Err(e) => {
+                            if removed == 0 {
+                                tracing::warn!(
+                                    error = %e,
+                                    device_ip = %rule.device_ip,
+                                    table,
+                                    "failed to remove ip rule for {device_ip}, table={table}: {e}",
+                                    device_ip = rule.device_ip,
+                                    table = table
+                                );
+                            }
+                            break;
+                        }
+                    }
+                }
+                if removed > 1 {
                     tracing::warn!(
-                        error = %e,
                         device_ip = %rule.device_ip,
                         table,
-                        "failed to remove ip rule"
+                        removed,
+                        "drained duplicate ip rules for {device_ip}: device_ip={device_ip}, table={table}, removed={removed}",
+                        device_ip = rule.device_ip,
+                        table = table,
+                        removed = removed
                     );
                 }
             }
@@ -1059,20 +1085,83 @@ impl RoutingService for RoutingServiceImpl {
                     .filter_map(|r| r.table.map(|_| r.device_ip.as_str()))
                     .collect();
 
-                let mut orphan_count = 0u32;
+                // Group by (ip, table) to detect both orphans and duplicates.
+                let mut ip_rule_counts: HashMap<(String, u32), u32> = HashMap::new();
                 for (src_ip, table) in &kernel_rules {
+                    *ip_rule_counts.entry((src_ip.clone(), *table)).or_insert(0) += 1;
+                }
+
+                let mut orphan_count = 0u32;
+                let mut duplicate_count = 0u32;
+                for ((src_ip, table), count) in &ip_rule_counts {
                     if !known_ips.contains(src_ip.as_str()) {
-                        orphan_count += 1;
-                        tracing::warn!(src_ip, table, "removing orphaned ip rule");
-                        if let Err(e) = self.netlink.remove_ip_rule(src_ip, *table).await {
-                            tracing::warn!(error = %e, src_ip, table, "failed to remove orphaned ip rule");
+                        // Orphan: remove all occurrences of this rule.
+                        for _ in 0..*count {
+                            tracing::warn!(
+                                src_ip = %src_ip,
+                                table,
+                                "removing orphaned ip rule: src_ip={src_ip}, table={table}",
+                                src_ip = src_ip,
+                                table = table
+                            );
+                            if let Err(e) = self.netlink.remove_ip_rule(src_ip, *table).await {
+                                tracing::warn!(
+                                    error = %e,
+                                    src_ip = %src_ip,
+                                    table,
+                                    "failed to remove orphaned ip rule for {src_ip}, table={table}: {e}",
+                                    src_ip = src_ip,
+                                    table = table
+                                );
+                                break;
+                            }
+                            orphan_count += 1;
+                        }
+                    } else if *count > 1 {
+                        // Active IP with duplicates: keep one, remove the rest.
+                        let extras = count - 1;
+                        tracing::warn!(
+                            src_ip = %src_ip,
+                            table,
+                            count,
+                            extras,
+                            "pruning duplicate ip rules for active device: src_ip={src_ip}, table={table}, count={count}, extras={extras}",
+                            src_ip = src_ip,
+                            table = table,
+                            count = count,
+                            extras = extras
+                        );
+                        for _ in 0..extras {
+                            if let Err(e) = self.netlink.remove_ip_rule(src_ip, *table).await {
+                                tracing::warn!(
+                                    error = %e,
+                                    src_ip = %src_ip,
+                                    table,
+                                    "failed to remove duplicate ip rule for {src_ip}, table={table}: {e}",
+                                    src_ip = src_ip,
+                                    table = table
+                                );
+                                break;
+                            }
+                            duplicate_count += 1;
                         }
                     }
                 }
                 if orphan_count > 0 {
-                    tracing::info!(orphan_count, "cleaned up orphaned ip rules");
+                    tracing::info!(
+                        orphan_count,
+                        "cleaned up orphaned ip rules: orphan_count={orphan_count}",
+                        orphan_count = orphan_count
+                    );
                 } else {
                     tracing::debug!("no orphaned ip rules found");
+                }
+                if duplicate_count > 0 {
+                    tracing::info!(
+                        duplicate_count,
+                        "pruned duplicate ip rules: duplicate_count={duplicate_count}",
+                        duplicate_count = duplicate_count
+                    );
                 }
             }
             Err(e) => {
