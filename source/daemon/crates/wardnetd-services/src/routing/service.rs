@@ -340,7 +340,7 @@ impl RoutingServiceImpl {
     ///
     /// Must be long enough for the device to retransmit at least once and
     /// receive the RST, but short enough to avoid blocking new connections.
-    const TCP_RST_HOLD_DURATION: Duration = Duration::from_millis(500);
+    const TCP_RST_HOLD_DURATION: Duration = Duration::from_millis(1500);
 
     /// Flush stale connections for a device after a routing change.
     ///
