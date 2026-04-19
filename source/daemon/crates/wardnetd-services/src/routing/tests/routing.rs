@@ -264,6 +264,11 @@ struct MockNetlink {
     has_route_table_result: Arc<Mutex<bool>>,
     /// When `true`, `has_route_table` returns an error instead of the result.
     has_route_table_error: Arc<Mutex<bool>>,
+    /// Tracks the number of ip rules installed per (ip, table).
+    /// Incremented by `add_ip_rule`, decremented by `remove_ip_rule`.
+    /// Pre-seeded from `wardnet_rules` to simulate pre-existing kernel state.
+    /// Returns an error when count reaches 0 (no such rule).
+    rule_counts: Arc<Mutex<HashMap<(String, u32), u32>>>,
 }
 
 #[async_trait]
@@ -313,6 +318,12 @@ impl PolicyRouter for MockNetlink {
             .lock()
             .await
             .push(format!("add_ip_rule:{src_ip}:{table}"));
+        *self
+            .rule_counts
+            .lock()
+            .await
+            .entry((src_ip.to_owned(), table))
+            .or_insert(0) += 1;
         Ok(())
     }
 
@@ -321,6 +332,12 @@ impl PolicyRouter for MockNetlink {
             .lock()
             .await
             .push(format!("remove_ip_rule:{src_ip}:{table}"));
+        let mut counts = self.rule_counts.lock().await;
+        let count = counts.entry((src_ip.to_owned(), table)).or_insert(0);
+        if *count == 0 {
+            anyhow::bail!("RTNETLINK answers: No such process");
+        }
+        *count -= 1;
         Ok(())
     }
 
@@ -462,6 +479,8 @@ struct TestSetup {
     has_route_table_result: Arc<Mutex<bool>>,
     has_route_table_error: Arc<Mutex<bool>>,
     add_tcp_reset_reject_fail: Arc<Mutex<bool>>,
+    /// Exposed so tests can pre-seed duplicate rule counts.
+    netlink_rule_counts: Arc<Mutex<HashMap<(String, u32), u32>>>,
 }
 
 fn device_id_1() -> Uuid {
@@ -572,12 +591,14 @@ fn setup_with_devices_and_tunnel(
         bring_ups: bring_ups.clone(),
         tear_downs: tear_downs.clone(),
     });
+    let rule_counts: Arc<Mutex<HashMap<(String, u32), u32>>> = Arc::new(Mutex::new(HashMap::new()));
     let netlink: Arc<dyn PolicyRouter> = Arc::new(MockNetlink {
         calls: netlink_calls.clone(),
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
         has_route_table_result: has_route_table_result.clone(),
         has_route_table_error: has_route_table_error.clone(),
+        rule_counts: rule_counts.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -603,6 +624,7 @@ fn setup_with_devices_and_tunnel(
         has_route_table_result,
         has_route_table_error,
         add_tcp_reset_reject_fail,
+        netlink_rule_counts: rule_counts,
     }
 }
 
@@ -631,12 +653,21 @@ fn setup_with_orphaned_rules(
         bring_ups: bring_ups.clone(),
         tear_downs: tear_downs.clone(),
     });
+    let initial_counts: HashMap<(String, u32), u32> =
+        kernel_rules
+            .iter()
+            .fold(HashMap::new(), |mut m, (ip, table)| {
+                *m.entry((ip.clone(), *table)).or_insert(0) += 1;
+                m
+            });
+    let rule_counts: Arc<Mutex<HashMap<(String, u32), u32>>> = Arc::new(Mutex::new(initial_counts));
     let netlink: Arc<dyn PolicyRouter> = Arc::new(MockNetlink {
         calls: netlink_calls.clone(),
         wardnet_rules: kernel_rules,
         route_add_failures_remaining: Arc::new(Mutex::new(0)),
         has_route_table_result: has_route_table_result.clone(),
         has_route_table_error: has_route_table_error.clone(),
+        rule_counts: rule_counts.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -662,6 +693,7 @@ fn setup_with_orphaned_rules(
         has_route_table_result,
         has_route_table_error,
         add_tcp_reset_reject_fail,
+        netlink_rule_counts: rule_counts,
     }
 }
 
@@ -688,12 +720,14 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         bring_ups: bring_ups.clone(),
         tear_downs: tear_downs.clone(),
     });
+    let rule_counts: Arc<Mutex<HashMap<(String, u32), u32>>> = Arc::new(Mutex::new(HashMap::new()));
     let netlink: Arc<dyn PolicyRouter> = Arc::new(MockNetlink {
         calls: netlink_calls.clone(),
         wardnet_rules: vec![],
         route_add_failures_remaining: Arc::new(Mutex::new(failures)),
         has_route_table_result: has_route_table_result.clone(),
         has_route_table_error: has_route_table_error.clone(),
+        rule_counts: rule_counts.clone(),
     });
     let nftables: Arc<dyn FirewallManager> = Arc::new(MockNftables {
         calls: nftables_calls.clone(),
@@ -719,6 +753,7 @@ fn setup_with_route_add_failures(failures: u32) -> TestSetup {
         has_route_table_result,
         has_route_table_error,
         add_tcp_reset_reject_fail,
+        netlink_rule_counts: rule_counts,
     }
 }
 
@@ -1601,6 +1636,93 @@ async fn handle_route_table_lost_re_applies_rules() {
     assert!(
         nl.contains(&"add_ip_rule:192.168.1.10:100".to_owned()),
         "expected ip rule to be re-applied: {nl:?}"
+    );
+}
+
+// -- Tests: duplicate ip rule cleanup (issue #78) ----------------------------
+
+#[tokio::test]
+async fn remove_device_kernel_state_drains_duplicate_ip_rules() {
+    let ts = setup();
+    let target = RoutingTarget::Tunnel {
+        tunnel_id: tunnel_id_1(),
+    };
+
+    // Apply a tunnel rule — rule_counts[("192.168.1.10", 100)] becomes 1.
+    as_admin(
+        ts.routing
+            .apply_rule(device_id_1(), "192.168.1.10", &target),
+    )
+    .await
+    .unwrap();
+
+    // Simulate a stale duplicate by bumping the kernel count to 2.
+    ts.netlink_rule_counts
+        .lock()
+        .await
+        .insert(("192.168.1.10".to_owned(), 100), 2);
+    ts.netlink_calls.lock().await.clear();
+
+    // Removing routes should loop until remove_ip_rule fails (count 0).
+    as_admin(
+        ts.routing
+            .remove_device_routes(device_id_1(), "192.168.1.10"),
+    )
+    .await
+    .unwrap();
+
+    let nl = ts.netlink_calls.lock().await;
+    // Count=2 → 2 successes + 1 failing attempt = 3 calls total.
+    let remove_count = nl
+        .iter()
+        .filter(|c| c.as_str() == "remove_ip_rule:192.168.1.10:100")
+        .count();
+    assert_eq!(
+        remove_count, 3,
+        "expected 3 remove_ip_rule calls (2 successes + 1 drain attempt): {nl:?}"
+    );
+}
+
+#[tokio::test]
+async fn reconcile_prunes_duplicate_rules_for_active_device() {
+    let tid = tunnel_id_1();
+    let d1 = sample_device(device_id_1(), "192.168.1.10");
+    let mut rules = HashMap::new();
+    rules.insert(
+        DEVICE_1_ID.to_owned(),
+        RoutingRule {
+            device_id: device_id_1(),
+            target: RoutingTarget::Tunnel { tunnel_id: tid },
+            created_by: RuleCreator::User,
+        },
+    );
+
+    // Kernel has 3 entries for the same (ip, table) — 2 are duplicates.
+    let kernel_rules = vec![
+        ("192.168.1.10".to_owned(), 100u32),
+        ("192.168.1.10".to_owned(), 100u32),
+        ("192.168.1.10".to_owned(), 100u32),
+    ];
+    let ts = setup_with_orphaned_rules(
+        vec![d1],
+        rules,
+        Some(sample_tunnel(tunnel_id_1(), "wg_ward0", TunnelStatus::Up)),
+        Some(sample_tunnel_config(vec!["1.1.1.1".to_owned()])),
+        kernel_rules,
+    );
+
+    as_admin(ts.routing.reconcile()).await.unwrap();
+
+    let nl = ts.netlink_calls.lock().await;
+    // Reconcile applies 1 rule via apply_rule, then sees count=3 in kernel →
+    // extras=2 → exactly 2 remove_ip_rule calls for the duplicate pruning.
+    let remove_count = nl
+        .iter()
+        .filter(|c| c.as_str() == "remove_ip_rule:192.168.1.10:100")
+        .count();
+    assert_eq!(
+        remove_count, 2,
+        "expected exactly 2 remove_ip_rule calls to prune 2 duplicate rules: {nl:?}"
     );
 }
 
