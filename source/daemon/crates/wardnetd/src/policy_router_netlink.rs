@@ -8,7 +8,7 @@ use rtnetlink::packet_route::route::{RouteAttribute, RouteScope};
 use rtnetlink::packet_route::rule::{RuleAction, RuleAttribute, RuleMessage};
 use rtnetlink::{Handle, RouteMessageBuilder};
 
-use wardnetd_services::command::CommandExecutor;
+use wardnetd_services::command::{CommandExecutor, CommandOutput};
 use wardnetd_services::routing::policy_router::PolicyRouter;
 
 /// Production [`PolicyRouter`] backed by Linux netlink sockets.
@@ -230,36 +230,72 @@ impl PolicyRouter for NetlinkPolicyRouter {
     async fn flush_conntrack(&self, src_ip: &str) -> anyhow::Result<()> {
         // Conntrack flush via CLI — no mature pure-Rust netlink crate for
         // NFNL_SUBSYS_CTNETLINK. Filed as future work.
-        let output = match self.executor.run("conntrack", &["-D", "-s", src_ip]).await {
-            Ok(o) => o,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                tracing::warn!(
-                    "`conntrack` command not found; install conntrack to enable \
-                     conntrack flushing on routing changes"
-                );
-                return Ok(());
+
+        // Helper closure to run one conntrack -D invocation and parse the
+        // deleted-entry count from its stderr output.
+        let run = |flag: &'static str| {
+            let executor = &self.executor;
+            async move {
+                match executor.run("conntrack", &["-D", flag, src_ip]).await {
+                    Ok(o) => Ok(o),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        tracing::warn!(
+                            "`conntrack` command not found; install conntrack to enable \
+                             conntrack flushing on routing changes"
+                        );
+                        // Return a synthetic "success with 0 deletions" so the caller
+                        // does not treat a missing binary as a hard error.
+                        Ok(CommandOutput {
+                            success: true,
+                            stdout: String::new(),
+                            stderr: String::new(),
+                        })
+                    }
+                    Err(e) => Err(anyhow::anyhow!("failed to execute `conntrack`: {e}")),
+                }
             }
-            Err(e) => return Err(anyhow::anyhow!("failed to execute `conntrack`: {e}")),
         };
 
-        let deleted = output
-            .stderr
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .windows(2)
-            .find_map(|w| (w[1] == "flow").then(|| w[0].parse::<u32>().ok()).flatten())
-            .unwrap_or(0);
+        let parse_deleted = |output: &CommandOutput| -> u32 {
+            output
+                .stderr
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .find_map(|w| (w[1] == "flow").then(|| w[0].parse::<u32>().ok()).flatten())
+                .unwrap_or(0)
+        };
 
-        if output.success || output.stderr.contains("flow entries have been deleted") {
-            tracing::info!(src_ip, deleted, "flushed conntrack entries for source IP");
-            return Ok(());
+        // Flush flows where the device is the source (outbound NAT entries).
+        let src_output = run("-s").await?;
+        if !src_output.success && !src_output.stderr.contains("flow entries have been deleted") {
+            anyhow::bail!(
+                "`conntrack -D -s {}` failed: {}",
+                src_ip,
+                src_output.stderr.trim()
+            );
         }
+        let deleted_src = parse_deleted(&src_output);
 
-        anyhow::bail!(
-            "`conntrack -D -s {}` failed: {}",
+        // Flush flows where the device is the destination (return-path entries
+        // created by server-initiated or push-notification traffic).
+        let dst_output = run("-d").await?;
+        if !dst_output.success && !dst_output.stderr.contains("flow entries have been deleted") {
+            anyhow::bail!(
+                "`conntrack -D -d {}` failed: {}",
+                src_ip,
+                dst_output.stderr.trim()
+            );
+        }
+        let deleted_dst = parse_deleted(&dst_output);
+
+        tracing::info!(
             src_ip,
-            output.stderr.trim()
-        )
+            deleted_src,
+            deleted_dst,
+            "flushed conntrack entries for device IP (source + destination)"
+        );
+        Ok(())
     }
 
     async fn flush_route_cache(&self) -> anyhow::Result<()> {
