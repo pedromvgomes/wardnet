@@ -31,8 +31,8 @@ export function ErrorView({ message, onRetry }: ErrorViewProps) {
         Something broke on our end
       </h1>
       <p className="mb-2 max-w-md text-base leading-relaxed text-gray-400">
-        The page hit an error while rendering. Try reloading — if it keeps
-        happening, file an issue and include what you were doing.
+        The page hit an error while rendering. Try reloading — if it keeps happening, file an issue
+        and include what you were doing.
       </p>
       {message && (
         <p className="mb-10 max-w-md rounded-md border border-white/10 bg-white/5 px-4 py-2 font-mono text-xs text-gray-300">

@@ -19,12 +19,10 @@ export function NotFound() {
         <SearchX size={14} aria-hidden="true" />
         Page not found
       </div>
-      <h1 className="mb-3 text-4xl font-bold tracking-tight text-white sm:text-5xl">
-        Off the map
-      </h1>
+      <h1 className="mb-3 text-4xl font-bold tracking-tight text-white sm:text-5xl">Off the map</h1>
       <p className="mb-10 max-w-md text-base leading-relaxed text-gray-400">
-        This URL doesn't route anywhere. If you followed a link from somewhere,
-        it's probably out of date.
+        This URL doesn't route anywhere. If you followed a link from somewhere, it's probably out of
+        date.
       </p>
 
       <div className="flex w-full max-w-xs flex-col gap-4 sm:max-w-none sm:flex-row sm:justify-center">
