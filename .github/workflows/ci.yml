@@ -124,10 +124,13 @@ jobs:
         run: make check-daemon SARIF_OUT=rust-clippy-results.sarif
 
       - name: Upload clippy findings to Code Scanning
-        # Always upload — even if the Check step failed (then the SARIF
-        # captures the very warnings that caused the failure).
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        # Upload even if the Check step failed (so SARIF captures the
+        # warnings that caused the failure) — but only when the file was
+        # actually written. A failure in `cargo fmt --check` (which runs
+        # before clippy) means no SARIF exists, and `hashFiles` evaluates
+        # to an empty string, skipping the upload.
+        if: always() && hashFiles('rust-clippy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: rust-clippy-results.sarif
           wait-for-processing: true
