@@ -1,0 +1,73 @@
+name: CodeQL
+
+# Advanced CodeQL setup for Wardnet.
+#
+# Switched from GitHub's default setup so we can pass a config file that
+# excludes test paths from analysis — tests contain intentional "bad"
+# patterns (hard-coded fixture passwords, canned keys) that make the
+# default setup noisy without adding signal.
+#
+# Matrix mirrors what default setup used to analyse (actions,
+# javascript-typescript, rust). Adding a language is one matrix entry.
+#
+# NOTE: after this workflow runs green for the first time, disable the
+# default setup in Settings → Security → Code scanning, otherwise both
+# will run and produce duplicate alerts.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sweep so new CVEs in the query pack surface even without pushes.
+    - cron: "0 4 * * 1"
+
+permissions: read-all
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: rust
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      # Rust autobuild is flaky — we compile the workspace ourselves so CodeQL
+      # can trace what we actually ship. build-mode=manual above makes CodeQL
+      # expect a build step between init and analyze.
+      - name: Set up Rust toolchain
+        if: matrix.language == 'rust'
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: codeql
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: .github/codeql/codeql-config.yml
+
+      - name: Build Rust workspace
+        if: matrix.language == 'rust'
+        run: cd source/daemon && cargo build --workspace
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
