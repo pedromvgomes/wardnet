@@ -91,11 +91,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Raspberry Pi (primary target for v1).
+          # Raspberry Pi and other aarch64 Linux boards.
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-latest
             cross_apt_packages: gcc-aarch64-linux-gnu
             strip: aarch64-linux-gnu-strip
+          # Non-Pi Linux hosts (mini-PCs, x86_64 servers, etc.). Built natively
+          # on the x86_64 runner, no cross-linker needed.
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            cross_apt_packages: ""
+            strip: strip
           # Additional targets slot in here as new matrix entries — no other
           # plumbing changes needed.
     steps:
@@ -229,10 +235,23 @@ jobs:
           PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
         run: |
           set -euo pipefail
-          ARGS=(--verify-tag --generate-notes --title "Wardnet ${VERSION}")
+          ARGS=(--verify-tag --title "Wardnet ${VERSION}")
+
+          # Prefer hand-written release notes at docs/releases/vX.Y.Z.md.
+          # Fall back to GitHub's auto-generated notes (diff since last tag).
+          NOTES_FILE="docs/releases/v${VERSION}.md"
+          if [[ -f "${NOTES_FILE}" ]]; then
+            echo "Using release notes from ${NOTES_FILE}"
+            ARGS+=(--notes-file "${NOTES_FILE}")
+          else
+            echo "No ${NOTES_FILE} found — falling back to auto-generated notes"
+            ARGS+=(--generate-notes)
+          fi
+
           if [[ "${PRERELEASE}" == "true" ]]; then
             ARGS+=(--prerelease)
           fi
+
           gh release create "${TAG}" "${ARGS[@]}" \
             release-artefacts/*.tar.gz \
             release-artefacts/*.tar.gz.sha256 \
