@@ -37,35 +37,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: javascript-typescript
-            build-mode: none
-          - language: rust
-            build-mode: manual
+        # The Rust extractor uses source-only analysis (`build-mode: none`)
+        # — manual/autobuild are not supported. `actions` and
+        # `javascript-typescript` are also source-only.
+        language: [actions, javascript-typescript, rust]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      # Rust autobuild is flaky — we compile the workspace ourselves so CodeQL
-      # can trace what we actually ship. build-mode=manual above makes CodeQL
-      # expect a build step between init and analyze.
-      - name: Set up Rust toolchain
-        if: matrix.language == 'rust'
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: codeql
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          build-mode: none
           config-file: .github/codeql/codeql-config.yml
-
-      - name: Build Rust workspace
-        if: matrix.language == 'rust'
-        run: cd source/daemon && cargo build --workspace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
