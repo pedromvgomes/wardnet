@@ -8,10 +8,11 @@ use wardnet_common::api::{
     CreateBlocklistResponse, CreateFilterRuleRequest, CreateFilterRuleResponse,
     DeleteAllowlistResponse, DeleteBlocklistResponse, DeleteFilterRuleResponse,
     DnsCacheFlushResponse, DnsConfigResponse, DnsStatusResponse, ListAllowlistResponse,
-    ListBlocklistsResponse, ListFilterRulesResponse, ToggleDnsRequest, UpdateBlocklistNowResponse,
-    UpdateBlocklistRequest, UpdateBlocklistResponse, UpdateDnsConfigRequest,
-    UpdateFilterRuleRequest, UpdateFilterRuleResponse,
+    ListBlocklistsResponse, ListFilterRulesResponse, ToggleDnsRequest, UpdateBlocklistRequest,
+    UpdateBlocklistResponse, UpdateDnsConfigRequest, UpdateFilterRuleRequest,
+    UpdateFilterRuleResponse,
 };
+use wardnet_common::jobs::JobDispatchedResponse;
 use wardnet_common::dns::{DnsConfig, DnsResolutionMode};
 
 use crate::DnsService;
@@ -164,7 +165,7 @@ impl DnsService for MockRunnerDnsService {
     async fn update_blocklist_now(
         &self,
         _id: Uuid,
-    ) -> Result<UpdateBlocklistNowResponse, AppError> {
+    ) -> Result<JobDispatchedResponse, AppError> {
         unimplemented!()
     }
     async fn list_allowlist(&self) -> Result<ListAllowlistResponse, AppError> {
@@ -658,7 +659,7 @@ impl DnsService for ErroringDnsService {
     async fn update_blocklist_now(
         &self,
         _id: Uuid,
-    ) -> Result<UpdateBlocklistNowResponse, AppError> {
+    ) -> Result<JobDispatchedResponse, AppError> {
         unimplemented!()
     }
     async fn list_allowlist(&self) -> Result<ListAllowlistResponse, AppError> {
@@ -859,7 +860,7 @@ async fn runner_handles_reload_config_error_after_event() {
         async fn update_blocklist_now(
             &self,
             _id: Uuid,
-        ) -> Result<UpdateBlocklistNowResponse, AppError> {
+        ) -> Result<JobDispatchedResponse, AppError> {
             unimplemented!()
         }
         async fn list_allowlist(&self) -> Result<ListAllowlistResponse, AppError> {
@@ -1507,7 +1508,7 @@ impl DnsService for FailingFilterInputsService {
     async fn update_blocklist_now(
         &self,
         _id: Uuid,
-    ) -> Result<UpdateBlocklistNowResponse, AppError> {
+    ) -> Result<JobDispatchedResponse, AppError> {
         unimplemented!()
     }
     async fn list_allowlist(&self) -> Result<ListAllowlistResponse, AppError> {

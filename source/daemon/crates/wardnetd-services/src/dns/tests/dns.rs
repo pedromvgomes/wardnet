@@ -15,9 +15,11 @@ use wardnet_common::dns::{
 use wardnet_common::event::WardnetEvent;
 
 use crate::auth_context;
+use crate::dns::blocklist_downloader::BlocklistFetcher;
 use crate::error::AppError;
 use crate::event::EventPublisher;
-use crate::{DnsService, DnsServiceImpl};
+use crate::jobs::JobServiceImpl;
+use crate::{DnsService, DnsServiceImpl, JobService};
 use wardnetd_data::repository::{
     AllowlistRow, BlocklistRow, BlocklistUpdate, CustomRuleRow, CustomRuleUpdate, DnsRepository,
     QueryLogFilter, QueryLogRow, SystemConfigRepository,
@@ -304,25 +306,41 @@ fn admin_ctx() -> AuthContext {
     }
 }
 
+struct StubBlocklistFetcher;
+#[async_trait]
+impl BlocklistFetcher for StubBlocklistFetcher {
+    async fn fetch(&self, _url: &str) -> anyhow::Result<String> {
+        unimplemented!("tests never dispatch a manual blocklist refresh")
+    }
+}
+
+fn stub_jobs() -> Arc<dyn JobService> {
+    JobServiceImpl::new()
+}
+
+fn stub_fetcher() -> Arc<dyn BlocklistFetcher> {
+    Arc::new(StubBlocklistFetcher)
+}
+
 fn build_service() -> DnsServiceImpl {
     let system_config = Arc::new(MockSystemConfigRepository::new());
     let dns_repo = Arc::new(MockDnsRepository::new());
     let events = Arc::new(MockEventPublisher::new());
-    DnsServiceImpl::new(system_config, dns_repo, events)
+    DnsServiceImpl::new(system_config, dns_repo, events, stub_jobs(), stub_fetcher())
 }
 
 fn build_service_with_config(data: HashMap<String, String>) -> DnsServiceImpl {
     let system_config = Arc::new(MockSystemConfigRepository::with_data(data));
     let dns_repo = Arc::new(MockDnsRepository::new());
     let events = Arc::new(MockEventPublisher::new());
-    DnsServiceImpl::new(system_config, dns_repo, events)
+    DnsServiceImpl::new(system_config, dns_repo, events, stub_jobs(), stub_fetcher())
 }
 
 fn build_service_with_repo() -> (DnsServiceImpl, Arc<MockSystemConfigRepository>) {
     let repo = Arc::new(MockSystemConfigRepository::new());
     let dns_repo = Arc::new(MockDnsRepository::new());
     let events = Arc::new(MockEventPublisher::new());
-    let svc = DnsServiceImpl::new(repo.clone(), dns_repo, events);
+    let svc = DnsServiceImpl::new(repo.clone(), dns_repo, events, stub_jobs(), stub_fetcher());
     (svc, repo)
 }
 
@@ -336,7 +354,13 @@ fn build_full_service() -> FullService {
     let system_config = Arc::new(MockSystemConfigRepository::new());
     let dns_repo = Arc::new(MockDnsRepository::new());
     let events = Arc::new(MockEventPublisher::new());
-    let svc = DnsServiceImpl::new(system_config, dns_repo.clone(), events.clone());
+    let svc = DnsServiceImpl::new(
+        system_config,
+        dns_repo.clone(),
+        events.clone(),
+        stub_jobs(),
+        stub_fetcher(),
+    );
     FullService {
         svc,
         dns_repo,
@@ -1058,8 +1082,10 @@ async fn update_blocklist_now_success() {
         .await
         .unwrap();
 
-    assert_eq!(resp.message, "blocklist refresh triggered");
-    assert_eq!(resp.blocklist.id, id);
+    // The endpoint dispatches a background job and returns its id. The stub
+    // fetcher panics if invoked, which is fine — the job spawns on the
+    // tokio runtime and we only assert the dispatch path.
+    assert!(!resp.job_id.is_nil());
 }
 
 #[tokio::test]

@@ -204,6 +204,26 @@ pub fn parse_line(raw: &str) -> Result<Option<ParsedRule>, ParseError> {
         }));
     }
 
+    // Wildcard-domain format (e.g. OISD `*.example.com`): semantically
+    // equivalent to a bare `example.com` block because our filter's
+    // `DomainBlock` already matches the domain itself and all subdomains.
+    // Only recognised when the remainder is a plain domain — any extra
+    // wildcards force the line down the regex/pattern path instead.
+    if let Some(stripped) = body.strip_prefix("*.") {
+        if !stripped.contains('*')
+            && !stripped.contains('/')
+            && stripped.contains('.')
+            && is_valid_domain(stripped)
+        {
+            let normalized = normalize_domain(stripped)?;
+            return Ok(Some(ParsedRule::DomainBlock {
+                domain: normalized,
+                modifiers: RuleModifiers::default(),
+                allow,
+            }));
+        }
+    }
+
     // Hosts-file: <ip> <domain> [aliases...]
     let tokens: Vec<&str> = body.split_whitespace().collect();
     if tokens.len() >= 2 {
