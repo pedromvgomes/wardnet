@@ -1,0 +1,57 @@
+name: CodeQL
+
+# Advanced CodeQL setup for Wardnet.
+#
+# Switched from GitHub's default setup so we can pass a config file that
+# excludes test paths from analysis — tests contain intentional "bad"
+# patterns (hard-coded fixture passwords, canned keys) that make the
+# default setup noisy without adding signal.
+#
+# Matrix mirrors what default setup used to analyse (actions,
+# javascript-typescript, rust). Adding a language is one matrix entry.
+#
+# NOTE: after this workflow runs green for the first time, disable the
+# default setup in Settings → Security → Code scanning, otherwise both
+# will run and produce duplicate alerts.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sweep so new CVEs in the query pack surface even without pushes.
+    - cron: "0 4 * * 1"
+
+permissions: read-all
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The Rust extractor uses source-only analysis (`build-mode: none`)
+        # — manual/autobuild are not supported. `actions` and
+        # `javascript-typescript` are also source-only.
+        language: [actions, javascript-typescript, rust]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: .github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
