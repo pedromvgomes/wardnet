@@ -164,9 +164,22 @@ else
 check-daemon: check-daemon-container
 endif
 
+# SARIF_OUT: when set to a path, `check-daemon-native` pipes clippy output
+# through `clippy-sarif` and writes a SARIF file there (for CI upload to the
+# GitHub Code Scanning tab). When unset, clippy runs plainly — no extra
+# tooling required for local dev.
+SARIF_OUT ?=
+
 check-daemon-native:
 	cd $(DAEMON_DIR) && cargo fmt --check
-	cd $(DAEMON_DIR) && cargo clippy --all-targets -- -D warnings
+	@set -o pipefail; \
+	if [ -n "$(SARIF_OUT)" ]; then \
+		echo "Emitting clippy SARIF -> $(SARIF_OUT)"; \
+		cd $(DAEMON_DIR) && cargo clippy --all-targets --message-format=json -- -D warnings \
+			| clippy-sarif | tee "$(abspath $(SARIF_OUT))" | sarif-fmt; \
+	else \
+		cd $(DAEMON_DIR) && cargo clippy --all-targets -- -D warnings; \
+	fi
 	cd $(DAEMON_DIR) && cargo test --workspace
 
 check-daemon-container:
