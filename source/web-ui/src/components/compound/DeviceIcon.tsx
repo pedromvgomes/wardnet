@@ -1,4 +1,15 @@
-import { Smartphone, Laptop, Tablet, Gamepad2, Tv, Cpu, HelpCircle, Router, Network, Server } from "lucide-react";
+import {
+  Smartphone,
+  Laptop,
+  Tablet,
+  Gamepad2,
+  Tv,
+  Cpu,
+  HelpCircle,
+  Router,
+  Network,
+  Server,
+} from "lucide-react";
 import type { DeviceType } from "@wardnet/js";
 import { cn } from "@/lib/utils";
 
