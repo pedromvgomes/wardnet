@@ -1,6 +1,10 @@
 # Wardnet Makefile
 # Unified build commands for local development and CI.
 
+# Recipes use bash (not /bin/sh → dash on Ubuntu) so `set -o pipefail`,
+# `[[ ... ]]`, and other bash-isms work consistently across macOS and CI.
+SHELL := /bin/bash
+
 # ---------- Configuration ----------
 
 PI_TARGET    := aarch64-unknown-linux-gnu
