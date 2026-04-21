@@ -164,6 +164,7 @@ fn connect_info() -> ConnectInfo<SocketAddr> {
 fn build_state(provider_svc: impl VpnProviderService + 'static) -> AppState {
     AppState::new(
         Arc::new(MockAuthService),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

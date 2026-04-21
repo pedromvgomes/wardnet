@@ -68,6 +68,7 @@ impl AuthService for MockAuthService {
 fn make_state(auth: impl AuthService + 'static) -> AppState {
     AppState::new(
         Arc::new(auth),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -347,6 +348,7 @@ fn make_state_with_device(
 ) -> AppState {
     AppState::new(
         Arc::new(auth),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(device_svc),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

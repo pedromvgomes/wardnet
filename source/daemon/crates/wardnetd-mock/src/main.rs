@@ -174,6 +174,19 @@ async fn run(
     let secret_store: Arc<dyn wardnetd_services::secret_store::SecretStore> =
         Arc::new(FileSecretStore::new(mock_secrets_root));
 
+    // Synthetic config path — the mock uses CLI flags rather than a
+    // wardnet.toml, so we write an empty placeholder that the backup
+    // service can still read on export.
+    let mock_config_path = std::env::temp_dir()
+        .join("wardnet-mock")
+        .join("wardnet.toml");
+    if !mock_config_path.exists() {
+        if let Some(parent) = mock_config_path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let _ = tokio::fs::write(&mock_config_path, b"# mock wardnet.toml\n").await;
+    }
+
     let backends = Backends {
         tunnel_interface: Arc::new(NoopTunnelInterface),
         policy_router: Arc::new(NoopPolicyRouter),
@@ -183,6 +196,8 @@ async fn run(
         secret_store,
         blocklist_fetcher: Arc::new(HttpBlocklistFetcher::new()),
         update: update_backends,
+        config_path: mock_config_path,
+        host_id: "wardnetd-mock".to_owned(),
     };
 
     // A synthetic LAN IP that looks plausible in UI copy.
@@ -206,6 +221,7 @@ async fn run(
 
     let state = AppState::new(
         services.auth.clone(),
+        services.backup.clone(),
         services.device.clone(),
         services.dhcp.clone(),
         services.dns.clone(),
