@@ -193,15 +193,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: source/web-e2e-tests/package-lock.json
-
+      # Uses the same Yarn 4 setup as all other JS packages. The e2e package
+      # uses `yarn install` (not --immutable) until a yarn.lock is committed.
       - uses: ./.github/actions/setup-node-yarn
         with:
-          cache-dependency-path: source/site/yarn.lock
+          cache-dependency-path: source/web-e2e-tests/yarn.lock
 
       - uses: ./.github/actions/setup-rust
 
@@ -211,8 +207,11 @@ jobs:
           name: web-ui-dist
           path: source/web-ui/dist/
 
-      - name: Install Playwright dependencies and browsers
-        run: cd source/web-e2e-tests && npm ci && npx playwright install --with-deps chromium
+      - name: Install e2e dependencies and Playwright browsers
+        run: |
+          cd source/web-e2e-tests
+          yarn install
+          yarn playwright install --with-deps chromium
 
       - name: Install site dependencies
         run: cd source/site && yarn install --immutable
@@ -224,10 +223,10 @@ jobs:
         run: |
           cd source/web-e2e-tests && \
             WARDNETD_MOCK_BIN=${{ github.workspace }}/source/daemon/target/release/wardnetd-mock \
-            npm run test:admin-ui
+            yarn test:admin-ui
 
       - name: Run E2E tests (site)
-        run: cd source/web-e2e-tests && npm run test:site
+        run: cd source/web-e2e-tests && yarn test:site
 
       - name: Upload Playwright report
         if: always()
