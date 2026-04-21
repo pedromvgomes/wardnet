@@ -38,10 +38,10 @@ use wardnetd_services::dhcp::runner::DhcpRunner;
 use wardnetd_services::dns::blocklist_downloader::{BlocklistFetcher, HttpBlocklistFetcher};
 use wardnetd_services::dns::filter::DnsFilter;
 use wardnetd_services::dns::runner::DnsRunner;
-use wardnetd_services::keys::FileKeyStore;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
+use wardnetd_services::secret_store::build_secret_store;
 use wardnetd_services::update::{
     EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier, UpdateRunner,
 };
@@ -192,7 +192,7 @@ async fn run(
         firewall: Arc::new(NftablesFirewallManager::new(executor.clone())),
         packet_capture: packet_capture.clone(),
         hostname_resolver: Arc::new(SystemHostnameResolver),
-        key_store: Arc::new(FileKeyStore::new(config.tunnel.keys_dir.clone())),
+        secret_store: build_secret_store(config.secret_store.as_ref()),
         blocklist_fetcher: blocklist_fetcher.clone(),
         update: update_backends,
     };

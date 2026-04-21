@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::config::{ApplicationConfiguration, LogFormat, LogRotation};
+use crate::config::{ApplicationConfiguration, LogFormat, LogRotation, SecretStoreConfig};
 
 #[test]
 fn defaults_when_file_missing() {
@@ -25,7 +25,7 @@ fn defaults_when_file_missing() {
     assert_eq!(config.network.lan_interface, "eth0");
     assert_eq!(config.network.default_policy, "direct");
     assert_eq!(config.auth.session_expiry_hours, 24);
-    assert_eq!(config.tunnel.keys_dir, PathBuf::from("/etc/wardnet/keys"));
+    assert!(config.secret_store.is_none());
     assert_eq!(config.tunnel.idle_timeout_secs, 600);
     assert_eq!(config.tunnel.health_check_interval_secs, 10);
     assert_eq!(config.tunnel.stats_interval_secs, 5);
@@ -63,6 +63,31 @@ nordvpn = false
     assert!(!config.is_vpn_provider_enabled("nordvpn"));
 
     // Clean up.
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn load_secret_store_file_system_section() {
+    let dir = std::env::temp_dir().join("wardnet-config-secret-store-test");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("wardnet-secret-store.toml");
+    std::fs::write(
+        &path,
+        r#"
+[secret_store]
+provider = "file_system"
+path = "/var/lib/wardnet/secrets"
+"#,
+    )
+    .unwrap();
+
+    let config = ApplicationConfiguration::load(&path).unwrap();
+    match config.secret_store.as_ref().expect("secret_store parsed") {
+        SecretStoreConfig::FileSystem { path } => {
+            assert_eq!(path, &PathBuf::from("/var/lib/wardnet/secrets"));
+        }
+    }
+
     let _ = std::fs::remove_file(&path);
 }
 

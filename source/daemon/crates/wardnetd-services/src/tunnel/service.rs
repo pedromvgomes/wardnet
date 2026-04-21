@@ -16,9 +16,11 @@ use crate::event::EventPublisher;
 use crate::tunnel::interface::{
     CreateTunnelParams, TunnelConfig as TiTunnelConfig, TunnelInterface,
 };
-use wardnetd_data::keys::KeyStore;
 use wardnetd_data::repository::TunnelRepository;
 use wardnetd_data::repository::tunnel::TunnelRow;
+use wardnetd_data::secret_store::SecretStore;
+
+use crate::tunnel::key_store::{KeyStore, KeyStoreAdapter};
 
 /// Tunnel lifecycle management.
 ///
@@ -87,8 +89,36 @@ pub struct TunnelServiceImpl {
 }
 
 impl TunnelServiceImpl {
-    /// Create a new tunnel service with the given dependencies.
+    /// Create a new tunnel service wired to the daemon's [`SecretStore`].
+    ///
+    /// `WireGuard` private keys are stored through a [`KeyStoreAdapter`]
+    /// built internally — callers outside this crate only need to hand
+    /// in a secret store; the key-store facade never escapes the tunnel
+    /// module.
     pub fn new(
+        tunnels: Arc<dyn TunnelRepository>,
+        devices: Arc<dyn wardnetd_data::repository::DeviceRepository>,
+        tunnel_interface: Arc<dyn TunnelInterface>,
+        secret_store: Arc<dyn SecretStore>,
+        events: Arc<dyn EventPublisher>,
+    ) -> Self {
+        let keys: Arc<dyn KeyStore> = Arc::new(KeyStoreAdapter::new(secret_store));
+        Self {
+            tunnels,
+            devices,
+            tunnel_interface,
+            keys,
+            events,
+        }
+    }
+
+    /// Test-only constructor that accepts a pre-built [`KeyStore`] mock.
+    ///
+    /// Kept `pub(crate)` so nothing outside `wardnetd-services` can
+    /// depend on the narrower interface — production code must go
+    /// through [`Self::new`] with a [`SecretStore`].
+    #[cfg(test)]
+    pub(crate) fn with_key_store(
         tunnels: Arc<dyn TunnelRepository>,
         devices: Arc<dyn wardnetd_data::repository::DeviceRepository>,
         tunnel_interface: Arc<dyn TunnelInterface>,

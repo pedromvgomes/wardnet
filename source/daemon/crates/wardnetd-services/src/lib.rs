@@ -3,8 +3,8 @@ pub mod command;
 pub mod error;
 pub mod event;
 pub mod jobs;
-pub mod keys;
 pub mod request_context;
+pub mod secret_store;
 pub mod version;
 
 pub mod auth;
@@ -63,7 +63,7 @@ pub struct Backends {
     pub firewall: Arc<dyn routing::FirewallManager>,
     pub packet_capture: Arc<dyn device::PacketCapture>,
     pub hostname_resolver: Arc<dyn device::HostnameResolver>,
-    pub key_store: Arc<dyn wardnetd_data::keys::KeyStore>,
+    pub secret_store: Arc<dyn wardnetd_data::secret_store::SecretStore>,
     pub blocklist_fetcher: Arc<dyn dns::blocklist_downloader::BlocklistFetcher>,
     pub update: UpdateBackends,
 }
@@ -225,7 +225,7 @@ fn create_services(
         tunnel_repo.clone(),
         device_repo.clone(),
         backends.tunnel_interface.clone(),
-        backends.key_store,
+        backends.secret_store.clone(),
         event_publisher.clone(),
     ));
 

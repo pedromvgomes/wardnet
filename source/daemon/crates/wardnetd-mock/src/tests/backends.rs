@@ -1,16 +1,12 @@
 //! Tests for the no-op backend implementations.
 //!
 //! These verify that every trait method returns `Ok(())` (or a sensible
-//! default) and that the stateful ones (DHCP/DNS servers, `InMemoryKeyStore`)
-//! update their state correctly. Coverage for the files themselves is
-//! excluded by the workspace-level `noop_*` regex, but we still want to
-//! confirm the traits compile and don't panic.
-
-use std::sync::Arc;
+//! default) and that the stateful ones (DHCP/DNS servers) update their
+//! state correctly. Coverage for the files themselves is excluded by
+//! the workspace-level `noop_*` regex, but we still want to confirm the
+//! traits compile and don't panic.
 
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
-use wardnetd_data::keys::KeyStore;
 use wardnetd_services::device::{HostnameResolver, PacketCapture};
 use wardnetd_services::dhcp::server::DhcpServer;
 use wardnetd_services::dns::server::DnsServer;
@@ -20,7 +16,6 @@ use wardnetd_services::tunnel::{CreateTunnelParams, TunnelConfig, TunnelInterfac
 use crate::backends::noop_device::{NoopHostnameResolver, NoopPacketCapture};
 use crate::backends::noop_dhcp::NoopDhcpServer;
 use crate::backends::noop_dns::NoopDnsServer;
-use crate::backends::noop_keys::InMemoryKeyStore;
 use crate::backends::noop_routing::{NoopFirewallManager, NoopPolicyRouter};
 use crate::backends::noop_tunnel::NoopTunnelInterface;
 
@@ -126,16 +121,4 @@ async fn noop_dns_server_toggles_and_returns_zero_metrics() {
         .await;
     s.stop().await.unwrap();
     assert!(!s.is_running());
-}
-
-#[tokio::test]
-async fn in_memory_key_store_save_load_delete() {
-    let store: Arc<dyn KeyStore> = Arc::new(InMemoryKeyStore::default());
-    let id = Uuid::new_v4();
-
-    assert!(store.load_key(&id).await.is_err());
-    store.save_key(&id, "secret").await.unwrap();
-    assert_eq!(store.load_key(&id).await.unwrap(), "secret");
-    store.delete_key(&id).await.unwrap();
-    assert!(store.load_key(&id).await.is_err());
 }

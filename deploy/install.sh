@@ -272,10 +272,13 @@ fi
 
 # 2. Directory structure. `/var/lib/wardnet/updates` must share a filesystem
 #    with `/usr/local/bin/wardnetd` so the auto-update rename is atomic;
-#    `/var/lib` qualifies on a typical Debian/Ubuntu install.
+#    `/var/lib` qualifies on a typical Debian/Ubuntu install. The secret
+#    store lives under `/var/lib/wardnet/secrets` (not `/etc`) because it
+#    holds runtime state — generated WireGuard keys, backup passphrases,
+#    destination credentials — not static operator configuration.
 install -d -o wardnet -g wardnet -m 750 /etc/wardnet
-install -d -o wardnet -g wardnet -m 700 /etc/wardnet/keys
 install -d -o wardnet -g wardnet -m 750 /var/lib/wardnet
+install -d -o wardnet -g wardnet -m 700 /var/lib/wardnet/secrets
 install -d -o wardnet -g wardnet -m 750 /var/lib/wardnet/updates
 install -d -o wardnet -g wardnet -m 750 /var/log/wardnet
 
@@ -293,8 +296,9 @@ level = "info"
 [network]
 lan_interface = "$LAN_INTERFACE"
 
-[tunnel]
-keys_dir = "/etc/wardnet/keys"
+[secret_store]
+provider = "file_system"
+path = "/var/lib/wardnet/secrets"
 EOF
     chown wardnet:wardnet /etc/wardnet/wardnet.toml
     chmod 640 /etc/wardnet/wardnet.toml

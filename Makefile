@@ -308,10 +308,10 @@ run-pi: build-pi
 		fi; \
 		OTEL_SECTION=$$(printf '\n[otel]\nenabled = true\nendpoint = "http://%s:4317"\n\n[otel.metrics]\nenabled = true\n\n[pyroscope]\nenabled = true\nendpoint = "http://%s:4040"\n' "$$OTEL_EP" "$$OTEL_EP"); \
 	fi && \
-	printf '[database]\npath = "%s/wardnet-dev/wardnet.db"\n\n[logging]\npath = "%s/wardnet-dev/logs/wardnetd.log"\nlevel = "debug"\n\n[network]\nlan_interface = "%s"\n\n[tunnel]\nkeys_dir = "%s/wardnet-dev/keys"\n%s' \
+	printf '[database]\npath = "%s/wardnet-dev/wardnet.db"\n\n[logging]\npath = "%s/wardnet-dev/logs/wardnetd.log"\nlevel = "debug"\n\n[network]\nlan_interface = "%s"\n\n[secret_store]\nprovider = "file_system"\npath = "%s/wardnet-dev/secrets"\n%s' \
 		"$$PI_HOME" "$$PI_HOME" "$(PI_LAN_IF)" "$$PI_HOME" "$$OTEL_SECTION" > /tmp/wardnet-dev.toml && \
 	ssh $(PI_REMOTE) 'sudo systemctl stop wardnetd-dev 2>/dev/null; true' && \
-	ssh $(PI_REMOTE) 'mkdir -p ~/wardnet-dev/keys ~/wardnet-dev/logs' && \
+	ssh $(PI_REMOTE) 'mkdir -p ~/wardnet-dev/secrets ~/wardnet-dev/logs' && \
 	if [ "$(RESUME)" != "true" ]; then \
 		echo "Cleaning database (use RESUME=true to keep it)..." && \
 		ssh $(PI_REMOTE) 'rm -f ~/wardnet-dev/wardnet.db ~/wardnet-dev/wardnet.db-wal ~/wardnet-dev/wardnet.db-shm'; \

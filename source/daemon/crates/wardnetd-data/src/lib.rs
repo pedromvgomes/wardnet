@@ -1,8 +1,8 @@
 pub mod bootstrap;
 pub mod db;
-pub mod keys;
 pub mod oui;
 pub mod repository;
+pub mod secret_store;
 
 #[cfg(test)]
 mod tests;

@@ -10,11 +10,10 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 use wardnet_common::config::ApplicationConfiguration;
 use wardnetd_data::SqliteRepositoryFactory;
 use wardnetd_data::db::init_pool_from_connection_string;
-use wardnetd_data::keys::KeyStore;
+use wardnetd_data::secret_store::SecretStore;
 
 use crate::Backends;
 use crate::device::hostname_resolver::HostnameResolver;
@@ -147,16 +146,19 @@ impl HostnameResolver for StubHostnameResolver {
     }
 }
 
-struct StubKeyStore;
+struct StubSecretStore;
 #[async_trait]
-impl KeyStore for StubKeyStore {
-    async fn save_key(&self, _tunnel_id: &Uuid, _private_key: &str) -> anyhow::Result<()> {
+impl SecretStore for StubSecretStore {
+    async fn put(&self, _path: &str, _value: &[u8]) -> anyhow::Result<()> {
         unimplemented!()
     }
-    async fn load_key(&self, _tunnel_id: &Uuid) -> anyhow::Result<String> {
+    async fn get(&self, _path: &str) -> anyhow::Result<Option<Vec<u8>>> {
         unimplemented!()
     }
-    async fn delete_key(&self, _tunnel_id: &Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, _path: &str) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    async fn list(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         unimplemented!()
     }
 }
@@ -172,7 +174,7 @@ fn stub_backends() -> Backends {
         firewall: Arc::new(StubFirewall),
         packet_capture: Arc::new(StubPacketCapture),
         hostname_resolver: Arc::new(StubHostnameResolver),
-        key_store: Arc::new(StubKeyStore),
+        secret_store: Arc::new(StubSecretStore),
         blocklist_fetcher: Arc::new(StubBlocklistFetcher),
         update: crate::UpdateBackends {
             release_source: Arc::new(StubReleaseSource),

@@ -23,7 +23,6 @@ use wardnetd_data::create_repository_factory;
 use wardnetd_mock::backends::noop_device::{NoopHostnameResolver, NoopPacketCapture};
 use wardnetd_mock::backends::noop_dhcp::NoopDhcpServer;
 use wardnetd_mock::backends::noop_dns::NoopDnsServer;
-use wardnetd_mock::backends::noop_keys::InMemoryKeyStore;
 use wardnetd_mock::backends::noop_routing::{NoopFirewallManager, NoopPolicyRouter};
 use wardnetd_mock::backends::noop_tunnel::NoopTunnelInterface;
 use wardnetd_mock::events::FakeEventEmitter;
@@ -32,6 +31,7 @@ use wardnetd_services::dns::blocklist_downloader::HttpBlocklistFetcher;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
+use wardnetd_services::secret_store::FileSecretStore;
 use wardnetd_services::update::{
     EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier,
 };
@@ -165,13 +165,22 @@ async fn run(
             mock_update_dir.join("staging"),
         )),
     };
+    // Real file-backed secret store rooted under the OS temp directory so
+    // the mock exercises the exact same save/load code path as production.
+    let mock_secrets_root = std::env::temp_dir().join("wardnet-mock").join("secrets");
+    tokio::fs::create_dir_all(&mock_secrets_root)
+        .await
+        .expect("failed to create mock secret store root");
+    let secret_store: Arc<dyn wardnetd_services::secret_store::SecretStore> =
+        Arc::new(FileSecretStore::new(mock_secrets_root));
+
     let backends = Backends {
         tunnel_interface: Arc::new(NoopTunnelInterface),
         policy_router: Arc::new(NoopPolicyRouter),
         firewall: Arc::new(NoopFirewallManager),
         packet_capture: Arc::new(NoopPacketCapture),
         hostname_resolver: Arc::new(NoopHostnameResolver),
-        key_store: Arc::new(InMemoryKeyStore::default()),
+        secret_store,
         blocklist_fetcher: Arc::new(HttpBlocklistFetcher::new()),
         update: update_backends,
     };
