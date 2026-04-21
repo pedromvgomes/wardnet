@@ -13,7 +13,7 @@ SDK_DIR      := source/sdk/wardnet-js
 WEBUI_DIR    := source/web-ui
 SITE_DIR     := source/site
 SYSTEST_DIR  := source/system-tests
-E2E_DIR      := source/e2e
+E2E_DIR      := source/web-e2e-tests
 
 # Override on CLI: make deploy PI_HOST=wardnet.local
 PI_HOST      ?= gateway
@@ -393,14 +393,14 @@ system-test: build-system-test
 # Run admin-ui E2E: build web UI, build wardnetd-mock (embeds the dist), run Playwright.
 e2e-admin: build-web
 	cd $(DAEMON_DIR) && cargo build -p wardnetd-mock --release
-	cd $(E2E_DIR) && yarn install --immutable && \
+	cd $(E2E_DIR) && npm ci && \
 		WARDNETD_MOCK_BIN=$(CURDIR)/$(DAEMON_DIR)/target/release/wardnetd-mock \
-		yarn test:admin-ui
+		npm run test:admin-ui
 
 # Run site E2E: install site deps (Playwright's webServer runs `yarn dev` in source/site/).
 e2e-site:
 	cd $(SITE_DIR) && yarn install --immutable
-	cd $(E2E_DIR) && yarn install --immutable && yarn test:site
+	cd $(E2E_DIR) && npm ci && npm run test:site
 
 e2e: e2e-admin e2e-site
 
