@@ -393,14 +393,14 @@ system-test: build-system-test
 # Run admin-ui E2E: build web UI, build wardnetd-mock (embeds the dist), run Playwright.
 e2e-admin: build-web
 	cd $(DAEMON_DIR) && cargo build -p wardnetd-mock --release
-	cd $(E2E_DIR) && yarn install && \
+	cd $(E2E_DIR) && yarn install --immutable && \
 		WARDNETD_MOCK_BIN=$(CURDIR)/$(DAEMON_DIR)/target/release/wardnetd-mock \
 		yarn test:admin-ui
 
 # Run site E2E: install site deps (Playwright's webServer runs `yarn dev` in source/site/).
 e2e-site:
 	cd $(SITE_DIR) && yarn install --immutable
-	cd $(E2E_DIR) && yarn install && yarn test:site
+	cd $(E2E_DIR) && yarn install --immutable && yarn test:site
 
 e2e: e2e-admin e2e-site
 

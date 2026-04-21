@@ -210,7 +210,7 @@ jobs:
       - name: Install e2e dependencies and Playwright browsers
         run: |
           cd source/web-e2e-tests
-          yarn install
+          yarn install --immutable
           yarn playwright install --with-deps chromium
 
       - name: Install site dependencies
