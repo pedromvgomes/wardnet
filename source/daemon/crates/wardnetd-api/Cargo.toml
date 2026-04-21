@@ -44,8 +44,6 @@ anyhow.workspace = true
 utoipa.workspace = true
 # https://crates.io/crates/utoipa-axum
 utoipa-axum.workspace = true
-# https://crates.io/crates/utoipa-scalar
-utoipa-scalar.workspace = true
 
 [dev-dependencies]
 # https://crates.io/crates/tokio

@@ -25,12 +25,34 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use utoipa_scalar::{Scalar, Servable};
-
 use crate::state::AppState;
 use crate::web::static_handler;
 use wardnetd_services::auth_context::AuthContextLayer;
 use wardnetd_services::request_context::RequestContextLayer;
+
+/// Build the OpenAPI-aware router by letting each module register its own
+/// handlers. Order is purely cosmetic — it controls the grouping in the
+/// generated docs. Seeded with [`crate::openapi::ApiDoc`] so the merged
+/// document carries the shared metadata (title, tags, security schemes).
+///
+/// Extracted from [`router`] so [`crate::api_doc`] can reuse the exact same
+/// chain to produce a spec that includes every handler path — without it,
+/// `ApiDoc::openapi()` alone only carries the static metadata.
+pub(crate) fn build_openapi_router() -> OpenApiRouter<AppState> {
+    let mut r = OpenApiRouter::<AppState>::with_openapi(crate::openapi::ApiDoc::openapi());
+    r = auth::register(r);
+    r = setup::register(r);
+    r = info::register(r);
+    r = devices::register(r);
+    r = tunnels::register(r);
+    r = providers::register(r);
+    r = dhcp::register(r);
+    r = dns::register(r);
+    r = system::register(r);
+    r = jobs::register(r);
+    r = update::register(r);
+    r
+}
 
 /// Build the complete application router.
 ///
@@ -43,28 +65,9 @@ use wardnetd_services::request_context::RequestContextLayer;
 /// Assembles all API routes under `/api/`, applies middleware (CORS, tracing),
 /// and falls back to the embedded static file handler for the web UI.
 pub fn router(state: AppState) -> Router {
-    // Build the OpenAPI-aware router by letting each module register its own
-    // handlers. Order is purely cosmetic — it controls the grouping in the
-    // generated docs.
-    //
-    // Seed the router with `ApiDoc` so the merged document carries the shared
-    // metadata (title, tags, security schemes) declared in `openapi.rs`.
-    let mut api_router = OpenApiRouter::<AppState>::with_openapi(crate::openapi::ApiDoc::openapi());
-    api_router = auth::register(api_router);
-    api_router = setup::register(api_router);
-    api_router = info::register(api_router);
-    api_router = devices::register(api_router);
-    api_router = tunnels::register(api_router);
-    api_router = providers::register(api_router);
-    api_router = dhcp::register(api_router);
-    api_router = dns::register(api_router);
-    api_router = system::register(api_router);
-    api_router = jobs::register(api_router);
-    api_router = update::register(api_router);
-
     // `split_for_parts` merges every handler path into the seeded `ApiDoc`
     // and returns the fully populated OpenAPI document.
-    let (api_router, openapi) = api_router.split_for_parts();
+    let (api_router, openapi) = build_openapi_router().split_for_parts();
 
     // Handler `#[utoipa::path(path = "/api/...")]` declares the full path, so
     // the generated axum router already routes under `/api/*`. WebSocket
@@ -84,17 +87,26 @@ pub fn router(state: AppState) -> Router {
         }),
     );
 
-    // Scalar UI: a single HTML page with the spec embedded as JSON. Because
-    // the spec is baked into the HTML at render time, `/api/docs` is the only
-    // route Scalar registers (no sub-path asset loading to gate separately).
-    // `route_layer` applies `AdminAuth` extraction to the Scalar sub-router so
-    // the docs shell itself is 401 for unauthenticated callers.
-    let scalar_router: Router<AppState> = Scalar::with_url("/api/docs", openapi).into();
-    let scalar_router = scalar_router.route_layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        require_admin_mw,
-    ));
-    let api_router = api_router.merge(scalar_router);
+    // Scalar UI: a hand-rolled HTML shell with our palette applied to Scalar's
+    // sidebar CSS variables. The spec is fetched from `/api/openapi.json` and
+    // the brand logo from `/api/docs/logo.png` at runtime — all three endpoints
+    // share the same admin-gating extractor.
+    let api_router = api_router
+        .route(
+            "/api/docs",
+            get(|_: middleware::AdminAuth| async {
+                axum::response::Html(crate::openapi::SCALAR_HTML)
+            }),
+        )
+        .route(
+            "/api/docs/logo.png",
+            get(|_: middleware::AdminAuth| async {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "image/png")],
+                    crate::openapi::LOGO_PNG,
+                )
+            }),
+        );
 
     Router::new()
         .merge(api_router)
@@ -141,25 +153,3 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// Middleware that rejects non-admin callers with 401.
-///
-/// Used to gate the Scalar docs router, which merges a full `Router` that can't
-/// accept extractors inline. Delegates to the same session-cookie/API-key
-/// logic as [`middleware::AdminAuth`] by running that extractor on the request.
-async fn require_admin_mw(
-    axum::extract::State(state): axum::extract::State<AppState>,
-    req: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    use axum::extract::FromRequestParts;
-    use axum::response::IntoResponse;
-
-    let (mut parts, body) = req.into_parts();
-    match middleware::AdminAuth::from_request_parts(&mut parts, &state).await {
-        Ok(_) => {
-            let req = axum::extract::Request::from_parts(parts, body);
-            next.run(req).await
-        }
-        Err(err) => err.into_response(),
-    }
-}

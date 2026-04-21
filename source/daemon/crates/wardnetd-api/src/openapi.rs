@@ -56,6 +56,75 @@ pub struct ApiDoc;
 /// the scheme name in their `security(...)` block.
 struct SecurityAddon;
 
+/// Wardnet logo served from `/api/docs/logo.png` and referenced by Scalar's
+/// `logoUrl` config so the docs page shows the brand mark at the top of the
+/// sidebar. Shared with the web UI — `include_bytes!` pulls the single
+/// canonical copy so the daemon rebuilds whenever the asset changes.
+pub const LOGO_PNG: &[u8] = include_bytes!("../../../../web-ui/src/assets/logo.png");
+
+/// HTML for the `/api/docs` Scalar UI.
+///
+/// Pulled in via Scalar's public CDN script (`@scalar/api-reference`), with a
+/// `<style>` block that retargets Scalar's built-in `--scalar-sidebar-*` CSS
+/// variables to Wardnet's palette (deep indigo background, green accent).
+/// The overrides are scoped to both `.dark-mode .sidebar` and `.light-mode
+/// .sidebar` so the branded sidebar survives theme toggles. All other Scalar
+/// surfaces use its default theme.
+///
+/// The API spec is loaded from `/api/openapi.json` at runtime — both routes
+/// are admin-gated on the server side, so an unauthenticated visitor sees a
+/// 401 on either call.
+pub const SCALAR_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wardnet API</title>
+  <style>
+    /* Modern Scalar attaches the sidebar CSS vars to its `.dark-mode`
+       / `.light-mode` scope on the app root, not to a nested `.sidebar`
+       container. Targeting the same scope lets us override at equal
+       specificity without needing `!important`. */
+    .dark-mode,
+    .light-mode {
+      --scalar-sidebar-background-1: oklch(0.2 0.1 275);
+      --scalar-sidebar-color-1: oklch(0.9 0.01 240);
+      --scalar-sidebar-color-2: oklch(0.9 0.01 240 / 0.55);
+      --scalar-sidebar-color-active: oklch(0.72 0.16 145);
+      --scalar-sidebar-item-hover-background: oklch(0.26 0.1 275);
+      --scalar-sidebar-item-hover-color: oklch(0.95 0.005 240);
+      --scalar-sidebar-item-active-background: oklch(0.26 0.1 275);
+      --scalar-sidebar-border-color: oklch(1 0 0 / 10%);
+      --scalar-sidebar-search-background: oklch(0.26 0.1 275);
+      --scalar-sidebar-search-border-color: oklch(1 0 0 / 10%);
+      --scalar-sidebar-search-color: oklch(0.9 0.01 240);
+    }
+  </style>
+</head>
+<body>
+  <div id="wardnet-api-docs"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script>
+    // Scalar 2.x programmatic API — gives us access to nested config keys
+    // (`agent`, `showDeveloperTools`) that the `data-configuration` attribute
+    // struggles to round-trip cleanly. The Ask-AI composer is disabled because
+    // Wardnet is a privacy tool and we don't want to ship an LLM widget in our
+    // own docs. `/favicon-32.png` is the same file the admin SPA uses, served
+    // by the daemon's rust-embed static handler.
+    // Standalone bundle exposes the factory under `window.Scalar`.
+    Scalar.createApiReference('#wardnet-api-docs', {
+      url: '/api/openapi.json',
+      favicon: '/favicon-32.png',
+      logoUrl: '/api/docs/logo.png',
+      agent: { disabled: true },
+      showDeveloperTools: 'never',
+      hideDarkModeToggle: true,
+      hideClientButton: true,
+    });
+  </script>
+</body>
+</html>"#;
+
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
