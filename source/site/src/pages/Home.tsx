@@ -23,8 +23,8 @@ export function Home() {
         <Navbar onLogoClick={() => setShowHero(true)} />
         <Features />
         <HowItWorks />
-        <TechStack />
         <GetStarted />
+        <TechStack />
         <Footer />
       </div>
     );

@@ -1,4 +1,5 @@
 import { Star } from "lucide-react";
+import { Link } from "react-router";
 import { Navbar } from "@/components/layouts/Navbar";
 import { resolveIcon } from "@/lib/icons";
 import docsContent from "../../content/docs.yml";
@@ -48,9 +49,10 @@ export function Docs() {
               {recommended.map((entry) => {
                 const Icon = resolveIcon(entry.icon);
                 return (
-                  <div
+                  <Link
                     key={entry.slug}
-                    className="rounded-lg border border-[var(--brand-green)]/20 bg-[var(--brand-green)]/5 p-5"
+                    to={`/docs/${entry.slug}`}
+                    className="block rounded-lg border border-[var(--brand-green)]/20 bg-[var(--brand-green)]/5 p-5 transition-colors hover:bg-[var(--brand-green)]/10"
                   >
                     <div className="mb-2 flex items-center gap-3">
                       {Icon && (
@@ -65,7 +67,7 @@ export function Docs() {
                     <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                       {entry.excerpt}
                     </p>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -77,9 +79,10 @@ export function Docs() {
               {topics.map((topic) => {
                 const Icon = resolveIcon(topic.icon);
                 return (
-                  <div
+                  <Link
                     key={topic.slug}
-                    className="rounded-lg border border-gray-200 p-5 dark:border-gray-800"
+                    to={`/docs/${topic.slug}`}
+                    className="block rounded-lg border border-gray-200 p-5 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-[oklch(0.15_0.02_270)]"
                   >
                     <div className="mb-2 flex items-center gap-3">
                       {Icon && (
@@ -94,7 +97,7 @@ export function Docs() {
                     <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                       {topic.description}
                     </p>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

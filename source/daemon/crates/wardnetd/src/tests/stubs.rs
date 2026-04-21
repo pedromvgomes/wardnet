@@ -531,6 +531,48 @@ impl EventPublisher for StubEventPublisher {
 }
 
 // ---------------------------------------------------------------------------
+// StubUpdateService
+// ---------------------------------------------------------------------------
+
+pub struct StubUpdateService;
+
+#[async_trait]
+impl wardnetd_services::UpdateService for StubUpdateService {
+    async fn status(&self) -> Result<wardnet_common::api::UpdateStatusResponse, AppError> {
+        unimplemented!()
+    }
+    async fn check(&self) -> Result<wardnet_common::api::UpdateCheckResponse, AppError> {
+        unimplemented!()
+    }
+    async fn install(
+        &self,
+        _req: wardnet_common::api::InstallUpdateRequest,
+    ) -> Result<wardnet_common::api::InstallUpdateResponse, AppError> {
+        unimplemented!()
+    }
+    async fn rollback(&self) -> Result<wardnet_common::api::RollbackResponse, AppError> {
+        unimplemented!()
+    }
+    async fn update_config(
+        &self,
+        _req: wardnet_common::api::UpdateConfigRequest,
+    ) -> Result<wardnet_common::api::UpdateConfigResponse, AppError> {
+        unimplemented!()
+    }
+    async fn history(
+        &self,
+        _limit: u32,
+    ) -> Result<wardnet_common::api::UpdateHistoryResponse, AppError> {
+        unimplemented!()
+    }
+    async fn auto_install_if_due(
+        &self,
+    ) -> Result<Option<wardnet_common::update::InstallHandle>, AppError> {
+        Ok(None)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StubDhcpServer
 // ---------------------------------------------------------------------------
 
@@ -602,6 +644,7 @@ pub fn test_app_state() -> AppState {
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(StubTunnelService),
+        Arc::new(StubUpdateService),
         Arc::new(StubDhcpServer),
         Arc::new(StubDnsServer),
         Arc::new(StubEventPublisher),

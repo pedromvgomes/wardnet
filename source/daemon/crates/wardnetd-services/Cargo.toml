@@ -65,6 +65,14 @@ cron.workspace = true
 regex.workspace = true
 # https://crates.io/crates/hickory-proto
 hickory-proto.workspace = true
+# https://crates.io/crates/semver — version comparison for auto-update
+semver.workspace = true
+# https://crates.io/crates/minisign-verify — signature verification for release tarballs
+minisign-verify.workspace = true
+# https://crates.io/crates/flate2 — gzip decompression for release tarballs
+flate2.workspace = true
+# https://crates.io/crates/tar — tarball extraction for release artefacts
+tar.workspace = true
 
 [dev-dependencies]
 # https://crates.io/crates/tokio

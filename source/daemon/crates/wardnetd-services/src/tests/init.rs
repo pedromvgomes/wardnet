@@ -174,6 +174,50 @@ fn stub_backends() -> Backends {
         hostname_resolver: Arc::new(StubHostnameResolver),
         key_store: Arc::new(StubKeyStore),
         blocklist_fetcher: Arc::new(StubBlocklistFetcher),
+        update: crate::UpdateBackends {
+            release_source: Arc::new(StubReleaseSource),
+            verifier: Arc::new(StubReleaseVerifier),
+            applier: Arc::new(StubBinaryApplier),
+        },
+    }
+}
+
+struct StubReleaseSource;
+#[async_trait]
+impl crate::update::release_source::ReleaseSource for StubReleaseSource {
+    async fn latest(
+        &self,
+        _channel: wardnet_common::update::UpdateChannel,
+    ) -> anyhow::Result<Option<wardnet_common::update::Release>> {
+        Ok(None)
+    }
+    async fn fetch_asset(&self, _url: &str) -> anyhow::Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+}
+
+struct StubReleaseVerifier;
+#[async_trait]
+impl crate::update::verifier::ReleaseVerifier for StubReleaseVerifier {
+    async fn verify_sha256(&self, _tarball: &[u8], _expected_hex: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn verify_signature(&self, _tarball: &[u8], _signature: &[u8]) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+struct StubBinaryApplier;
+#[async_trait]
+impl crate::update::applier::BinaryApplier for StubBinaryApplier {
+    async fn apply(&self, _tarball: &[u8]) -> anyhow::Result<crate::update::applier::SwapOutcome> {
+        unimplemented!("init tests never apply a real tarball")
+    }
+    async fn rollback(&self) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    async fn rollback_available(&self) -> bool {
+        false
     }
 }
 

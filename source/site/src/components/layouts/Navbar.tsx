@@ -5,14 +5,20 @@ import { Logo } from "@/components/compound/Logo";
 interface NavbarProps {
   /** Callback fired when the logo/brand is clicked. Falls back to navigating to "/". */
   onLogoClick?: () => void;
-  /** When true, shows a back arrow before the logo linking to "/". */
+  /** When true, shows a back arrow before the logo. */
   showBack?: boolean;
+  /**
+   * Destination for the back arrow / brand click. Defaults to the home
+   * content view. Article pages pass `/docs` so the arrow returns to the
+   * docs index rather than jumping past it to the homepage.
+   */
+  backTo?: string;
 }
 
 /**
  * Sticky navigation bar used across the site.
  */
-export function Navbar({ onLogoClick, showBack }: NavbarProps) {
+export function Navbar({ onLogoClick, showBack, backTo }: NavbarProps) {
   const brand = (
     <>
       {showBack && <ArrowLeft size={16} className="text-white/60" />}
@@ -28,7 +34,10 @@ export function Navbar({ onLogoClick, showBack }: NavbarProps) {
           {brand}
         </button>
       ) : (
-        <Link to={showBack ? "/?view=content" : "/"} className="flex items-center gap-2">
+        <Link
+          to={backTo ?? (showBack ? "/?view=content" : "/")}
+          className="flex items-center gap-2"
+        >
           {brand}
         </Link>
       )}

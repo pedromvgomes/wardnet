@@ -10,6 +10,7 @@ import {
   Globe,
   Users,
   Terminal,
+  Sparkles,
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -26,6 +27,7 @@ const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
   globe: Globe,
   users: Users,
   terminal: Terminal,
+  sparkles: Sparkles,
 };
 
 /** Resolves a string icon name from YAML content to a Lucide icon component. */

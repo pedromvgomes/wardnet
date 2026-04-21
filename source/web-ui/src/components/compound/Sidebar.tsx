@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
+import { useUpdateStatus } from "@/hooks/useUpdate";
 import { Logo } from "./Logo";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { UpdateBanner } from "./UpdateBanner";
 
 interface SidebarProps {
   onNavigate?: () => void;
@@ -29,6 +31,9 @@ const adminLinks: NavItem[] = [
 export function Sidebar({ onNavigate }: SidebarProps) {
   const { isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  // Only admins see update state — self-service users don't have the perms
+  // to trigger installs, so we don't bother them with the banner.
+  const { data: updateStatus } = useUpdateStatus();
 
   const links = isAdmin ? adminLinks : selfServiceLinks;
 
@@ -66,6 +71,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       </nav>
 
       <div className="flex flex-col gap-3 border-t border-sidebar-border p-4">
+        {isAdmin && (
+          <UpdateBanner
+            updateAvailable={updateStatus?.status.update_available ?? false}
+            latestVersion={updateStatus?.status.latest_version ?? null}
+          />
+        )}
         <ConnectionStatus />
         {isAdmin ? (
           <button

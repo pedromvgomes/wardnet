@@ -39,8 +39,10 @@ Learn more at [**wardnet.network**](https://wardnet.network).
 ## Install
 
 ```sh
-curl -sSL https://wardnet.network/install.sh | bash
+curl -sSL https://wardnet.network/install.sh | sudo bash
 ```
+
+Full walkthrough, configuration reference, and more in the [**user documentation**](https://wardnet.network/docs).
 
 Supported targets:
 
@@ -51,6 +53,7 @@ Both are first-class targets — install on whichever fits your network. See the
 
 ## Documentation
 
+- [**User documentation**](https://wardnet.network/docs) — installation, configuration, setup walkthrough, guides
 - [**Development guide**](docs/DEVELOPMENT.md) — build, run locally, deploy, contribute
 - [**Security policy & release signing**](SECURITY.md) — reporting vulnerabilities, verifying releases
 - [**Release notes**](docs/releases/) — per-version changelogs

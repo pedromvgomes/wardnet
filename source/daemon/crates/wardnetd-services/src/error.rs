@@ -23,6 +23,12 @@ pub enum AppError {
     #[error("conflict: {0}")]
     Conflict(String),
 
+    /// An external service (release manifest host, provider API, etc.) failed
+    /// in a way we want the caller to see verbatim. Mapped to 502 Bad Gateway
+    /// and the string is surfaced in the response `detail` field.
+    #[error("upstream unavailable: {0}")]
+    UpstreamUnavailable(String),
+
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 
@@ -40,6 +46,17 @@ impl IntoResponse for AppError {
             Self::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", Some(msg.clone())),
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad request", Some(msg.clone())),
             Self::Conflict(msg) => (StatusCode::CONFLICT, "conflict", Some(msg.clone())),
+            Self::UpstreamUnavailable(msg) => {
+                // Log at warn-level with the cause in the message so the
+                // recent-errors feed captures it; not a programmer bug so
+                // not an error-level event.
+                tracing::warn!("upstream unavailable: {msg}");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "upstream unavailable",
+                    Some(msg.clone()),
+                )
+            }
             Self::Internal(err) => {
                 tracing::error!(error = %err, "internal server error");
                 (

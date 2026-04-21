@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router";
 import { ErrorBoundary } from "@/components/compound/ErrorBoundary";
 import { Home } from "@/pages/Home";
 import { Docs } from "@/pages/Docs";
+import { DocsArticle } from "@/pages/DocsArticle";
 import { NotFound } from "@/pages/NotFound";
 
 /**
@@ -21,6 +22,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/docs" element={<Docs />} />
+          <Route path="/docs/:slug" element={<DocsArticle />} />
           {/* Dev-only: force a render-time error so the ErrorBoundary can be
               exercised locally. Stripped from production builds by Vite's
               dead-code elimination on `import.meta.env.DEV`. */}

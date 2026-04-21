@@ -184,6 +184,7 @@ fn build_state(tunnel_svc: impl TunnelService + 'static) -> AppState {
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(tunnel_svc),
+        Arc::new(crate::tests::stubs::StubUpdateService),
         Arc::new(StubDhcpServer),
         Arc::new(StubDnsServer),
         Arc::new(StubEventPublisher),

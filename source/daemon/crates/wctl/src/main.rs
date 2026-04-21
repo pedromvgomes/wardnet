@@ -25,6 +25,25 @@ enum Commands {
     /// Manage tunnels
     #[command(subcommand)]
     Tunnels(TunnelsCommand),
+    /// Manage auto-update
+    #[command(subcommand)]
+    Update(UpdateCommand),
+}
+
+#[derive(Subcommand)]
+enum UpdateCommand {
+    /// Show current auto-update status (version, channel, pending install).
+    Status,
+    /// Force a manifest refresh against the active channel.
+    Check,
+    /// Install the latest known release (or a specific version).
+    Install {
+        /// Optional version to install (must match the channel's latest).
+        #[arg(long)]
+        version: Option<String>,
+    },
+    /// Roll back to the `<live>.old` binary.
+    Rollback,
 }
 
 #[derive(Subcommand)]
@@ -100,6 +119,15 @@ fn main() {
             TunnelsCommand::Remove { id } => {
                 println!("tunnels remove {id}: not yet implemented");
             }
+        },
+        Commands::Update(cmd) => match cmd {
+            UpdateCommand::Status => println!("update status: not yet implemented"),
+            UpdateCommand::Check => println!("update check: not yet implemented"),
+            UpdateCommand::Install { version } => match version {
+                Some(v) => println!("update install --version {v}: not yet implemented"),
+                None => println!("update install: not yet implemented"),
+            },
+            UpdateCommand::Rollback => println!("update rollback: not yet implemented"),
         },
     }
 }

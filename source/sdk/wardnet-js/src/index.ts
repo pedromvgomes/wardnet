@@ -99,6 +99,28 @@ export type {
 // Services — DNS
 export { DnsService } from "./services/dns.js";
 
+// Services — auto-update
+export { UpdateService } from "./services/update.js";
+
+// Types — auto-update
+export type {
+  UpdateChannel,
+  UpdateHistoryStatus,
+  InstallPhase,
+  Release,
+  UpdateHistoryEntry,
+  InstallHandle,
+  UpdateStatus,
+  UpdateStatusResponse,
+  UpdateCheckResponse,
+  InstallUpdateRequest,
+  InstallUpdateResponse,
+  RollbackResponse,
+  UpdateConfigRequest,
+  UpdateConfigResponse,
+  UpdateHistoryResponse,
+} from "./types/update.js";
+
 // Types — DNS
 export type {
   DnsProtocol,

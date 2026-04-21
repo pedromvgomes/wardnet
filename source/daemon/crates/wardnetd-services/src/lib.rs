@@ -15,6 +15,7 @@ pub mod logging;
 pub mod routing;
 pub mod system;
 pub mod tunnel;
+pub mod update;
 pub mod vpn;
 
 #[cfg(test)]
@@ -37,6 +38,7 @@ use crate::jobs::JobServiceImpl;
 use crate::routing::RoutingServiceImpl;
 use crate::system::SystemServiceImpl;
 use crate::tunnel::TunnelServiceImpl;
+use crate::update::UpdateServiceImpl;
 use crate::vpn::{VpnProviderRegistry, VpnProviderServiceImpl};
 
 pub use crate::auth::AuthService;
@@ -48,6 +50,7 @@ pub use crate::logging::LogService;
 pub use crate::routing::RoutingService;
 pub use crate::system::SystemService;
 pub use crate::tunnel::TunnelService;
+pub use crate::update::UpdateService;
 pub use crate::vpn::VpnProviderService;
 
 /// Backends provided by the caller (real or mock).
@@ -62,6 +65,16 @@ pub struct Backends {
     pub hostname_resolver: Arc<dyn device::HostnameResolver>,
     pub key_store: Arc<dyn wardnetd_data::keys::KeyStore>,
     pub blocklist_fetcher: Arc<dyn dns::blocklist_downloader::BlocklistFetcher>,
+    pub update: UpdateBackends,
+}
+
+/// Auto-update backends, grouped so the three concerns (release discovery,
+/// artefact verification, binary swap) travel together but stay individually
+/// swappable for unit tests.
+pub struct UpdateBackends {
+    pub release_source: Arc<dyn update::ReleaseSource>,
+    pub verifier: Arc<dyn update::ReleaseVerifier>,
+    pub applier: Arc<dyn update::BinaryApplier>,
 }
 
 /// All wired services, ready to use.
@@ -76,6 +89,7 @@ pub struct Services {
     pub routing: Arc<dyn RoutingService>,
     pub system: Arc<dyn SystemService>,
     pub tunnel: Arc<dyn TunnelService>,
+    pub update: Arc<dyn UpdateService>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub jobs: Arc<dyn JobService>,
     pub dns_repo: Arc<dyn DnsRepository>,
@@ -169,6 +183,7 @@ fn create_services(
     let dhcp_repo = repo_factory.dhcp();
     let dns_repo = repo_factory.dns();
     let tunnel_repo = repo_factory.tunnel();
+    let update_repo = repo_factory.update();
 
     let event_publisher: Arc<dyn EventPublisher> = Arc::new(BroadcastEventBus::new(256));
     let job_service: Arc<dyn JobService> = JobServiceImpl::new();
@@ -243,6 +258,17 @@ fn create_services(
         config.network.lan_interface.clone(),
     ));
 
+    let update_service: Arc<dyn UpdateService> = Arc::new(UpdateServiceImpl::new(
+        system_config_for_update(repo_factory),
+        update_repo,
+        backends.update.release_source,
+        backends.update.verifier,
+        backends.update.applier,
+        event_publisher.clone(),
+        config.update.require_signature,
+        version::VERSION,
+    ));
+
     Services {
         auth: auth_service,
         device: device_service,
@@ -254,8 +280,20 @@ fn create_services(
         routing: routing_service,
         system: system_service,
         tunnel: tunnel_service,
+        update: update_service,
         event_publisher,
         jobs: job_service,
         dns_repo,
     }
+}
+
+/// Fresh handle to the `system_config` repo for the update service.
+///
+/// `system_config_repo` has already been moved into `SystemService`, so we
+/// ask the factory for another instance. Each repo trait object wraps an
+/// `Arc<SqlitePool>`, so this is cheap.
+fn system_config_for_update(
+    repo_factory: &dyn RepositoryFactory,
+) -> Arc<dyn wardnetd_data::repository::SystemConfigRepository> {
+    repo_factory.system_config()
 }
