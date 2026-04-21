@@ -128,7 +128,10 @@ fn api_doc_unauthenticated_endpoint_has_empty_security() {
     // whose only entry is `{}` — meaning "no scheme required".
     let doc = api_doc_json();
     let security = &doc["paths"]["/api/info"]["get"]["security"];
-    assert!(security.is_array(), "security must be an array, got {security}");
+    assert!(
+        security.is_array(),
+        "security must be an array, got {security}"
+    );
     let arr = security.as_array().unwrap();
     assert_eq!(arr.len(), 1, "expected exactly one requirement entry");
     let first = arr[0].as_object().expect("entry must be an object");
@@ -179,6 +182,7 @@ fn scalar_html_wires_runtime_config() {
         "agent: { disabled: true }",
         "mcp: { disabled: true }",
         "showDeveloperTools: 'never'",
+        "wardnet-brand",
         "hideDarkModeToggle: true",
         "Scalar.createApiReference",
     ] {

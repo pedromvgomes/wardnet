@@ -26,7 +26,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
         .routes(routes!(download_logs))
 }
 
-/// GET /api/system/status
+/// Get system status: version, uptime, and resource counts.
 ///
 /// Thin handler — returns system status (version, uptime, counts).
 /// Requires admin authentication via session cookie or API key.
@@ -51,7 +51,7 @@ pub async fn status(
     Ok(Json(response))
 }
 
-/// GET /api/system/logs/download
+/// Download the full daemon log file as plain text.
 ///
 /// Downloads the full log file as human-readable text.
 /// Requires admin authentication.
@@ -116,7 +116,7 @@ pub struct RecentErrorsResponse {
     pub errors: Vec<ApiErrorEntry>,
 }
 
-/// GET /api/system/errors
+/// Get the most recent warnings and errors from the ring buffer.
 ///
 /// Returns the last 15 warnings and errors from the in-memory ring buffer.
 /// Requires admin authentication.

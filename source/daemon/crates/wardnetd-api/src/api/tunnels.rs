@@ -20,7 +20,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
         .routes(routes!(delete_tunnel))
 }
 
-/// GET /api/tunnels
+/// List all configured VPN tunnels.
 ///
 /// Thin handler — lists all configured tunnels. Requires admin authentication.
 #[utoipa::path(
@@ -44,7 +44,7 @@ pub async fn list_tunnels(
     Ok(Json(response))
 }
 
-/// POST /api/tunnels
+/// Import a tunnel from a `WireGuard` `.conf` file.
 ///
 /// Thin handler — imports a tunnel from a `WireGuard` `.conf` file.
 /// Requires admin authentication.
@@ -72,7 +72,7 @@ pub async fn create_tunnel(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// DELETE /api/tunnels/:id
+/// Delete a tunnel and its configuration by ID.
 ///
 /// Thin handler — deletes a tunnel and its configuration.
 /// Requires admin authentication.

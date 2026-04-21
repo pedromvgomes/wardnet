@@ -36,7 +36,7 @@ const PATH_RESERVATIONS: &str = "/api/dhcp/reservations";
 const PATH_RESERVATION_ITEM: &str = "/api/dhcp/reservations/{id}";
 const PATH_STATUS: &str = "/api/dhcp/status";
 
-/// GET /api/dhcp/config
+/// Get the current DHCP pool configuration.
 ///
 /// Thin handler — returns the current DHCP pool configuration.
 /// Requires admin authentication.
@@ -61,7 +61,7 @@ pub async fn get_config(
     Ok(Json(response))
 }
 
-/// PUT /api/dhcp/config
+/// Update the DHCP pool configuration.
 ///
 /// Thin handler — updates the DHCP pool configuration.
 /// Requires admin authentication.
@@ -89,7 +89,7 @@ pub async fn update_config(
     Ok(Json(response))
 }
 
-/// POST /api/dhcp/config/toggle
+/// Enable or disable the DHCP server.
 ///
 /// Thin handler — enables or disables the DHCP server.
 /// Requires admin authentication.
@@ -126,7 +126,7 @@ pub async fn toggle(
     Ok(Json(response))
 }
 
-/// GET /api/dhcp/leases
+/// List all active DHCP leases.
 ///
 /// Thin handler — lists all active DHCP leases.
 /// Requires admin authentication.
@@ -151,7 +151,7 @@ pub async fn list_leases(
     Ok(Json(response))
 }
 
-/// DELETE /api/dhcp/leases/:id
+/// Revoke an active DHCP lease by ID.
 ///
 /// Thin handler — revokes an active DHCP lease.
 /// Requires admin authentication.
@@ -179,7 +179,7 @@ pub async fn revoke_lease(
     Ok(Json(response))
 }
 
-/// GET /api/dhcp/reservations
+/// List all static DHCP reservations.
 ///
 /// Thin handler — lists all static DHCP reservations.
 /// Requires admin authentication.
@@ -204,7 +204,7 @@ pub async fn list_reservations(
     Ok(Json(response))
 }
 
-/// POST /api/dhcp/reservations
+/// Create a static MAC-to-IP DHCP reservation.
 ///
 /// Thin handler — creates a new static MAC-to-IP reservation.
 /// Requires admin authentication.
@@ -232,7 +232,7 @@ pub async fn create_reservation(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// DELETE /api/dhcp/reservations/:id
+/// Delete a static DHCP reservation by ID.
 ///
 /// Thin handler — deletes a static DHCP reservation.
 /// Requires admin authentication.
@@ -260,7 +260,7 @@ pub async fn delete_reservation(
     Ok(Json(response))
 }
 
-/// GET /api/dhcp/status
+/// Get DHCP server status and pool usage.
 ///
 /// Thin handler — returns DHCP server status and pool usage.
 /// Requires admin authentication.

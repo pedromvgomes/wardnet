@@ -15,7 +15,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
     router.routes(routes!(login))
 }
 
-/// POST /api/auth/login
+/// Log in with username and password, issuing a session cookie.
 ///
 /// Thin handler — delegates credential verification and session creation
 /// to [`AuthService`](wardnetd_services::AuthService), then sets the session cookie.

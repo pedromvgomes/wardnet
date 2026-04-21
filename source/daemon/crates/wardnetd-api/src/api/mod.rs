@@ -18,6 +18,8 @@ mod tests;
 
 use std::time::Duration;
 
+use crate::state::AppState;
+use crate::web::static_handler;
 use axum::Router;
 use axum::http;
 use axum::routing::get;
@@ -25,8 +27,6 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use crate::state::AppState;
-use crate::web::static_handler;
 use wardnetd_services::auth_context::AuthContextLayer;
 use wardnetd_services::request_context::RequestContextLayer;
 
@@ -152,4 +152,3 @@ pub fn router(state: AppState) -> Router {
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
-

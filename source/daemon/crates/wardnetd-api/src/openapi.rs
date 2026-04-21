@@ -99,6 +99,26 @@ pub const SCALAR_HTML: &str = r#"<!doctype html>
       --scalar-sidebar-search-border-color: oklch(1 0 0 / 10%);
       --scalar-sidebar-search-color: oklch(0.9 0.01 240);
     }
+    /* Custom brand mark prepended into Scalar's sidebar by the script below.
+       Scalar doesn't ship a top-of-sidebar logo config yet
+       (github.com/scalar/scalar/discussions/914); DOM injection is the
+       documented workaround. The container matches the sidebar palette
+       and spacing so the logo feels native. */
+    .wardnet-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 14px 16px;
+      color: oklch(0.95 0.005 240);
+      font-weight: 600;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+    }
+    .wardnet-brand img {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -117,13 +137,7 @@ pub const SCALAR_HTML: &str = r#"<!doctype html>
     // config root. The standalone bundle exposes the factory under
     // `window.Scalar`.
     Scalar.createApiReference('#wardnet-api-docs', {
-      sources: [
-        {
-          url: '/api/openapi.json',
-          logoUrl: '/api/docs/logo.png',
-          title: 'Wardnet API',
-        },
-      ],
+      url: '/api/openapi.json',
       favicon: '/favicon-32.png',
       agent: { disabled: true },
       mcp: { disabled: true },
@@ -131,6 +145,25 @@ pub const SCALAR_HTML: &str = r#"<!doctype html>
       hideDarkModeToggle: true,
       hideClientButton: true,
     });
+
+    // Inject the Wardnet brand mark at the top of Scalar's sidebar. The
+    // top-of-sidebar logo isn't a config knob upstream
+    // (see github.com/scalar/scalar/discussions/914 — PR #4215 tracks it),
+    // so we watch for the sidebar element to mount and prepend our own node.
+    // The observer auto-disconnects after the first successful insertion.
+    (function injectBrand() {
+      const observer = new MutationObserver(() => {
+        const sidebar = document.querySelector('.sidebar, [class*="sidebar"]');
+        if (!sidebar || sidebar.querySelector('.wardnet-brand')) return;
+        const brand = document.createElement('div');
+        brand.className = 'wardnet-brand';
+        brand.innerHTML =
+          '<img src="/api/docs/logo.png" alt="" /><span>Wardnet</span>';
+        sidebar.prepend(brand);
+        observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    })();
   </script>
 </body>
 </html>"#;

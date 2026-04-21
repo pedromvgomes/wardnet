@@ -36,7 +36,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
         .routes(routes!(update_filter_rule, delete_filter_rule))
 }
 
-/// GET /api/dns/config
+/// Get the current DNS filter configuration.
 #[utoipa::path(
     get,
     path = "/api/dns/config",
@@ -58,7 +58,7 @@ pub async fn get_config(
     Ok(Json(response))
 }
 
-/// PUT /api/dns/config
+/// Update the DNS filter configuration.
 #[utoipa::path(
     put,
     path = "/api/dns/config",
@@ -83,7 +83,7 @@ pub async fn update_config(
     Ok(Json(response))
 }
 
-/// POST /api/dns/config/toggle
+/// Enable or disable the DNS filter server.
 #[utoipa::path(
     post,
     path = "/api/dns/config/toggle",
@@ -118,7 +118,7 @@ pub async fn toggle(
     Ok(Json(response))
 }
 
-/// GET /api/dns/status
+/// Get DNS server status and cache statistics.
 #[utoipa::path(
     get,
     path = "/api/dns/status",
@@ -147,7 +147,7 @@ pub async fn status(
     }))
 }
 
-/// POST /api/dns/cache/flush
+/// Flush the DNS resolver cache.
 #[utoipa::path(
     post,
     path = "/api/dns/cache/flush",
@@ -176,7 +176,7 @@ pub async fn flush_cache(
 // Blocklists
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/blocklists
+/// List all configured blocklists.
 #[utoipa::path(
     get,
     path = "/api/dns/blocklists",
@@ -198,7 +198,7 @@ pub async fn list_blocklists(
     Ok(Json(response))
 }
 
-/// POST /api/dns/blocklists
+/// Create a new blocklist source.
 #[utoipa::path(
     post,
     path = "/api/dns/blocklists",
@@ -223,7 +223,7 @@ pub async fn create_blocklist(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// PUT /api/dns/blocklists/{id}
+/// Update an existing blocklist by ID.
 #[utoipa::path(
     put,
     path = "/api/dns/blocklists/{id}",
@@ -251,7 +251,7 @@ pub async fn update_blocklist(
     Ok(Json(response))
 }
 
-/// DELETE /api/dns/blocklists/{id}
+/// Delete a blocklist by ID.
 #[utoipa::path(
     delete,
     path = "/api/dns/blocklists/{id}",
@@ -276,9 +276,11 @@ pub async fn delete_blocklist(
     Ok(Json(response))
 }
 
-/// POST /api/dns/blocklists/{id}/update — dispatches a background job that
-/// fetches, parses, and stores the blocklist. Returns 202 Accepted with the
-/// job id so the client can poll `GET /api/jobs/:id` for progress.
+/// Trigger an immediate refresh of a blocklist.
+///
+/// Dispatches a background job that fetches, parses, and stores the blocklist.
+/// Returns 202 Accepted with the job id so the client can poll the jobs
+/// endpoint for progress.
 #[utoipa::path(
     post,
     path = "/api/dns/blocklists/{id}/update",
@@ -307,7 +309,7 @@ pub async fn update_blocklist_now(
 // Allowlist
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/allowlist
+/// List all DNS allowlist entries.
 #[utoipa::path(
     get,
     path = "/api/dns/allowlist",
@@ -329,7 +331,7 @@ pub async fn list_allowlist(
     Ok(Json(response))
 }
 
-/// POST /api/dns/allowlist
+/// Add a domain to the DNS allowlist.
 #[utoipa::path(
     post,
     path = "/api/dns/allowlist",
@@ -354,7 +356,7 @@ pub async fn create_allowlist_entry(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// DELETE /api/dns/allowlist/{id}
+/// Remove a domain from the DNS allowlist.
 #[utoipa::path(
     delete,
     path = "/api/dns/allowlist/{id}",
@@ -383,7 +385,7 @@ pub async fn delete_allowlist_entry(
 // Custom filter rules
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/rules
+/// List all custom DNS filter rules.
 #[utoipa::path(
     get,
     path = "/api/dns/rules",
@@ -405,7 +407,7 @@ pub async fn list_filter_rules(
     Ok(Json(response))
 }
 
-/// POST /api/dns/rules
+/// Create a custom DNS filter rule.
 #[utoipa::path(
     post,
     path = "/api/dns/rules",
@@ -430,7 +432,7 @@ pub async fn create_filter_rule(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// PUT /api/dns/rules/{id}
+/// Update a custom DNS filter rule by ID.
 #[utoipa::path(
     put,
     path = "/api/dns/rules/{id}",
@@ -458,7 +460,7 @@ pub async fn update_filter_rule(
     Ok(Json(response))
 }
 
-/// DELETE /api/dns/rules/{id}
+/// Delete a custom DNS filter rule by ID.
 #[utoipa::path(
     delete,
     path = "/api/dns/rules/{id}",

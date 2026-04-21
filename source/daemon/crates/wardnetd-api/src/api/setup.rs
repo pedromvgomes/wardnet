@@ -14,7 +14,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
     router.routes(routes!(setup_status)).routes(routes!(setup))
 }
 
-/// GET /api/setup/status
+/// Check whether the initial setup wizard has been completed.
 ///
 /// Thin handler — returns whether the initial setup wizard has been completed.
 /// No authentication required so the web UI can check before rendering.
@@ -35,7 +35,7 @@ pub async fn setup_status(
     Ok(Json(SetupStatusResponse { setup_completed }))
 }
 
-/// POST /api/setup
+/// Create the first admin account (initial setup wizard).
 ///
 /// Thin handler — creates the first admin account during initial setup.
 /// No authentication required. Returns 409 if setup has already been completed.

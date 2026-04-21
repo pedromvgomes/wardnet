@@ -11,7 +11,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
     router.routes(routes!(info))
 }
 
-/// GET /api/info
+/// Get daemon version and uptime.
 ///
 /// Thin handler — returns the daemon version and uptime.
 /// No authentication required. Used by the web UI connection status widget.

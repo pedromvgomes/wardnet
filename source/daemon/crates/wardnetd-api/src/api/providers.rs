@@ -23,7 +23,7 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
         .routes(routes!(setup_tunnel))
 }
 
-/// GET /api/providers -- list all registered VPN providers.
+/// List all registered VPN providers.
 #[utoipa::path(
     get,
     path = "/api/providers",
@@ -45,7 +45,7 @@ pub async fn list_providers(
     Ok(Json(response))
 }
 
-/// POST /api/providers/{id}/validate -- validate credentials for a provider.
+/// Validate credentials against a VPN provider.
 #[utoipa::path(
     post,
     path = "/api/providers/{id}/validate",
@@ -76,7 +76,7 @@ pub async fn validate_credentials(
     Ok(Json(response))
 }
 
-/// GET /api/providers/{id}/countries -- list countries where a provider has servers.
+/// List countries where a VPN provider has servers.
 #[utoipa::path(
     get,
     path = "/api/providers/{id}/countries",
@@ -101,7 +101,7 @@ pub async fn list_countries(
     Ok(Json(response))
 }
 
-/// POST /api/providers/{id}/servers -- list available servers (POST because body contains credentials).
+/// List available VPN servers for a provider using supplied credentials.
 #[utoipa::path(
     post,
     path = "/api/providers/{id}/servers",
@@ -129,7 +129,7 @@ pub async fn list_servers(
     Ok(Json(response))
 }
 
-/// POST /api/providers/{id}/setup -- full guided tunnel setup through a provider.
+/// Run full guided tunnel setup through a VPN provider.
 #[utoipa::path(
     post,
     path = "/api/providers/{id}/setup",

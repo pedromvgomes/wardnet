@@ -44,7 +44,7 @@ const fn default_history_limit() -> u32 {
     20
 }
 
-/// GET /api/update/status
+/// Get the current auto-update status.
 #[utoipa::path(
     get,
     path = "/api/update/status",
@@ -65,7 +65,7 @@ pub async fn status(
     Ok(Json(state.update_service().status().await?))
 }
 
-/// POST /api/update/check — force a manifest refresh.
+/// Force a manifest refresh to check for new releases.
 #[utoipa::path(
     post,
     path = "/api/update/check",
@@ -86,7 +86,7 @@ pub async fn check(
     Ok(Json(state.update_service().check().await?))
 }
 
-/// POST /api/update/install — kick off an install.
+/// Kick off an install of an available release.
 #[utoipa::path(
     post,
     path = "/api/update/install",
@@ -111,7 +111,7 @@ pub async fn install(
     Ok(Json(state.update_service().install(req).await?))
 }
 
-/// POST /api/update/rollback — swap back to `<live>.old`.
+/// Roll back to the previous binary swapped aside as `<live>.old`.
 #[utoipa::path(
     post,
     path = "/api/update/rollback",
@@ -132,7 +132,7 @@ pub async fn rollback(
     Ok(Json(state.update_service().rollback().await?))
 }
 
-/// PUT /api/update/config — toggle auto-update / switch channel.
+/// Toggle auto-update or switch release channel.
 #[utoipa::path(
     put,
     path = "/api/update/config",
@@ -156,7 +156,7 @@ pub async fn update_config(
     Ok(Json(state.update_service().update_config(body).await?))
 }
 
-/// GET /api/update/history?limit=N
+/// List recent install/rollback attempts.
 #[utoipa::path(
     get,
     path = "/api/update/history",

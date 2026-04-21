@@ -31,7 +31,7 @@ const PATH_ME_RULE: &str = "/api/devices/me/rule";
 const PATH_LIST: &str = "/api/devices";
 const PATH_ITEM: &str = "/api/devices/{id}";
 
-/// GET /api/devices/me
+/// Get the caller's own device info and routing rule (by source IP).
 ///
 /// Thin handler — identifies the caller by source IP and returns their
 /// device info and current routing rule. No authentication required.
@@ -79,7 +79,7 @@ pub async fn get_me(
     Ok(Json(response))
 }
 
-/// PUT /api/devices/me/rule
+/// Set the caller's own routing rule (self-service by source IP).
 ///
 /// Thin handler — allows the caller to set their own routing rule.
 /// Delegates admin-lock checks to [`DeviceService`](wardnetd_services::DeviceService).
@@ -146,7 +146,7 @@ fn enrich_device(
     }
 }
 
-/// GET /api/devices — List all devices (admin only).
+/// List all devices with their DHCP status (admin only).
 #[utoipa::path(
     get,
     path = PATH_LIST,
@@ -175,7 +175,7 @@ pub async fn list_devices(
     Ok(Json(ListDevicesResponse { devices }))
 }
 
-/// GET /api/devices/:id — Get device detail with routing rule (admin only).
+/// Get device detail with its current routing rule (admin only).
 #[utoipa::path(
     get,
     path = PATH_ITEM,
@@ -215,7 +215,7 @@ pub async fn get_device(
     }))
 }
 
-/// PUT /api/devices/:id — Update device properties (admin only).
+/// Update device properties (admin only).
 ///
 /// Supports updating name, device type, routing target, and admin-locked flag.
 /// Each field is optional; only provided fields are changed.
