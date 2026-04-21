@@ -1,0 +1,16 @@
+{
+  "name": "@wardnet/e2e",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:admin-ui": "playwright test --project=admin-ui",
+    "test:site": "playwright test --project=site",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.52.0"
+  },
+  "packageManager": "yarn@4.13.0"
+}

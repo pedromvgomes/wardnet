@@ -186,6 +186,51 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  e2e:
+    name: E2E Tests
+    needs: [build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: ./.github/actions/setup-node-yarn
+        with:
+          cache-dependency-path: source/e2e/yarn.lock
+
+      - uses: ./.github/actions/setup-rust
+
+      - name: Download web-ui dist
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: web-ui-dist
+          path: source/web-ui/dist/
+
+      - name: Install Playwright browsers
+        run: cd source/e2e && yarn install --immutable && yarn playwright install --with-deps chromium
+
+      - name: Install site dependencies
+        run: cd source/site && yarn install --immutable
+
+      - name: Build wardnetd-mock
+        run: cd source/daemon && cargo build -p wardnetd-mock --release
+
+      - name: Run E2E tests (admin-ui)
+        run: |
+          cd source/e2e && \
+            WARDNETD_MOCK_BIN=${{ github.workspace }}/source/daemon/target/release/wardnetd-mock \
+            yarn test:admin-ui
+
+      - name: Run E2E tests (site)
+        run: cd source/e2e && yarn test:site
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report
+          path: source/e2e/playwright-report/
+          retention-days: 7
+
   build-daemon:
     name: Build Daemon (${{ matrix.target }})
     needs: [build-web, check-daemon]

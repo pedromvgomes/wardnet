@@ -13,6 +13,7 @@ SDK_DIR      := source/sdk/wardnet-js
 WEBUI_DIR    := source/web-ui
 SITE_DIR     := source/site
 SYSTEST_DIR  := source/system-tests
+E2E_DIR      := source/e2e
 
 # Override on CLI: make deploy PI_HOST=wardnet.local
 PI_HOST      ?= gateway
@@ -45,6 +46,7 @@ COV_FMT    ?= --summary-only
         coverage-daemon coverage-daemon-native coverage-daemon-container \
         fmt clippy test \
         deploy run-pi run-dev system-test system-test-setup system-test-teardown \
+        e2e e2e-admin e2e-site \
         sync-version check-version \
         clean help
 
@@ -374,6 +376,34 @@ system-test: build-system-test
 		ssh $(PI_REMOTE) 'sudo $(SYSTEST_REMOTE_DIR)/run-tests.sh teardown'; \
 		exit $$TEST_EXIT
 
+# ---------- E2E Tests ----------
+#
+# Browser-level tests using Playwright. Two projects:
+#   admin-ui — tests the admin web UI via wardnetd-mock on :7411
+#   site     — tests the public marketing site via Vite dev server on :7413
+#
+# Local usage (Playwright manages the servers):
+#   make e2e           # run both suites
+#   make e2e-admin     # run admin-ui suite only (slower: builds web UI + mock first)
+#   make e2e-site      # run site suite only
+#
+# Interactive Playwright UI:
+#   cd source/e2e && yarn test:ui
+
+# Run admin-ui E2E: build web UI, build wardnetd-mock (embeds the dist), run Playwright.
+e2e-admin: build-web
+	cd $(DAEMON_DIR) && cargo build -p wardnetd-mock --release
+	cd $(E2E_DIR) && yarn install --immutable && \
+		WARDNETD_MOCK_BIN=$(CURDIR)/$(DAEMON_DIR)/target/release/wardnetd-mock \
+		yarn test:admin-ui
+
+# Run site E2E: install site deps (Playwright's webServer runs `yarn dev` in source/site/).
+e2e-site:
+	cd $(SITE_DIR) && yarn install --immutable
+	cd $(E2E_DIR) && yarn install --immutable && yarn test:site
+
+e2e: e2e-admin e2e-site
+
 # ---------- Utilities ----------
 
 clean:
@@ -414,6 +444,10 @@ help:
 	@echo "                 make system-test PI_HOST=10.232.1.1"
 	@echo "  system-test-setup    Deploy and start test environment (leave running)"
 	@echo "  system-test-teardown Stop test environment on Pi"
+	@echo ""
+	@echo "  e2e            Run all Playwright E2E tests (admin-ui + site)"
+	@echo "  e2e-admin      Admin UI E2E: build web UI + wardnetd-mock, run Playwright"
+	@echo "  e2e-site       Site E2E: run Playwright against Vite dev server"
 	@echo ""
 	@echo "  sync-version   Propagate ./VERSION into daemon Cargo.toml + package.json files"
 	@echo "  check-version  Verify all versioned files match ./VERSION (CI gate)"
