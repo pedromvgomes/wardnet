@@ -194,6 +194,7 @@ fn build_state(dhcp_svc: impl DhcpService + 'static) -> AppState {
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(StubTunnelService),
+        Arc::new(crate::tests::stubs::StubUpdateService),
         Arc::new(StubDhcpServer),
         Arc::new(StubDnsServer),
         Arc::new(StubEventPublisher),

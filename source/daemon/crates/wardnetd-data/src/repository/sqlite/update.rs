@@ -31,7 +31,7 @@ struct DbRow {
 
 impl DbRow {
     fn into_entry(self) -> anyhow::Result<UpdateHistoryEntry> {
-        let status = UpdateHistoryStatus::from_str(&self.status)
+        let status = UpdateHistoryStatus::parse_opt(&self.status)
             .ok_or_else(|| anyhow::anyhow!("unknown update history status: {}", self.status))?;
         let finished_at = self
             .finished_at

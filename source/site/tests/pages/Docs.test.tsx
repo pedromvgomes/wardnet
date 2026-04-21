@@ -38,7 +38,20 @@ describe("Docs", () => {
 
   it("renders a back link to the content view", () => {
     renderDocs();
-    const backLink = screen.getByRole("link", { name: /wardnet/i });
-    expect(backLink).toHaveAttribute("href", "/?view=content");
+    // Doc cards now link to /docs/<slug> (cards are clickable) and also
+    // contain the word "Wardnet" in their descriptions — match anchors
+    // pointing at the home-content deep link explicitly to dodge them.
+    const backLink = screen
+      .getAllByRole("link")
+      .find((el) => el.getAttribute("href") === "/?view=content");
+    expect(backLink).toBeDefined();
+  });
+
+  it("links each topic card to its doc slug", () => {
+    renderDocs();
+    const installLink = screen
+      .getAllByRole("link")
+      .find((el) => el.getAttribute("href") === "/docs/installation");
+    expect(installLink).toBeDefined();
   });
 });

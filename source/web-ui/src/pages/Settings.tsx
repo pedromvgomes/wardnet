@@ -1,11 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/core/ui/card";
 import { PageHeader } from "@/components/compound/PageHeader";
+import { UpdateCard } from "@/components/features/UpdateCard";
 import { useSystemStatus } from "@/hooks/useSystemStatus";
+import {
+  useCheckForUpdates,
+  useInstallUpdate,
+  useRollbackUpdate,
+  useUpdateConfig,
+  useUpdateStatus,
+} from "@/hooks/useUpdate";
 import { formatBytes, formatUptime } from "@/lib/utils";
 
 /** Settings page for system configuration (admin only). */
 export default function Settings() {
   const { data: status, isLoading } = useSystemStatus();
+  const { data: updateStatus, isLoading: updateLoading } = useUpdateStatus();
+  const check = useCheckForUpdates();
+  const install = useInstallUpdate();
+  const rollback = useRollbackUpdate();
+  const saveConfig = useUpdateConfig();
 
   return (
     <>
@@ -46,6 +59,19 @@ export default function Settings() {
             )}
           </CardContent>
         </Card>
+
+        <UpdateCard
+          status={updateStatus?.status ?? null}
+          isLoading={updateLoading}
+          isChecking={check.isPending}
+          isInstalling={install.isPending}
+          isRollingBack={rollback.isPending}
+          onCheck={() => check.mutate()}
+          onInstall={() => install.mutate({})}
+          onRollback={() => rollback.mutate()}
+          onToggleAutoUpdate={(enabled) => saveConfig.mutate({ auto_update_enabled: enabled })}
+          onChangeChannel={(channel) => saveConfig.mutate({ channel })}
+        />
 
         <Card>
           <CardHeader>

@@ -42,7 +42,10 @@ use wardnetd_services::keys::FileKeyStore;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
-use wardnetd_services::{Backends, auth_context, init_services};
+use wardnetd_services::update::{
+    EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier, UpdateRunner,
+};
+use wardnetd_services::{Backends, UpdateBackends, auth_context, init_services};
 
 /// Wardnet daemon — self-hosted network privacy gateway.
 #[derive(Parser)]
@@ -156,6 +159,30 @@ async fn run(
     let executor = Arc::new(wardnetd::command::ShellCommandExecutor);
     let packet_capture = Arc::new(PnetCapture);
     let blocklist_fetcher: Arc<dyn BlocklistFetcher> = Arc::new(HttpBlocklistFetcher::new());
+
+    // Auto-update backends. The short arch name is resolved from the compile-
+    // time target triple injected by build.rs (`WARDNET_TARGET`); falling back
+    // to the runtime `ARCH` keeps dev builds working even if the env var is
+    // absent.
+    let target_triple = option_env!("WARDNET_TARGET").unwrap_or("");
+    let arch =
+        wardnetd_services::update::short_arch(target_triple).unwrap_or(std::env::consts::ARCH);
+    let update_backends = UpdateBackends {
+        release_source: Arc::new(
+            HttpsManifestSource::new(
+                &config.update.manifest_base_url,
+                arch,
+                Duration::from_secs(config.update.http_timeout_secs),
+            )
+            .expect("failed to build release manifest source"),
+        ),
+        verifier: Arc::new(Sha256MinisignVerifier::new(EMBEDDED_PUBLIC_KEY)),
+        applier: Arc::new(FsBinaryApplier::new(
+            config.update.live_binary_path.clone(),
+            config.update.staging_dir.clone(),
+        )),
+    };
+
     let backends = Backends {
         tunnel_interface: Arc::new(WireGuardTunnelInterface),
         policy_router: Arc::new(
@@ -167,6 +194,7 @@ async fn run(
         hostname_resolver: Arc::new(SystemHostnameResolver),
         key_store: Arc::new(FileKeyStore::new(config.tunnel.keys_dir.clone())),
         blocklist_fetcher: blocklist_fetcher.clone(),
+        update: update_backends,
     };
 
     // Wire services (initialises repo factory, bootstraps admin, creates all services).
@@ -315,6 +343,14 @@ async fn run(
         Duration::from_secs(60),
     );
 
+    // Start the auto-update poller. An initial check runs immediately; then
+    // every `check_interval_secs` with ±10% jitter.
+    let update_runner = UpdateRunner::start(
+        services.update.clone(),
+        Duration::from_secs(config.update.check_interval_secs),
+        &root_span,
+    );
+
     let state = AppState::new(
         services.auth.clone(),
         services.device.clone(),
@@ -326,6 +362,7 @@ async fn run(
         services.routing.clone(),
         services.system.clone(),
         services.tunnel.clone(),
+        services.update.clone(),
         dhcp_server,
         dns_server,
         services.event_publisher.clone(),
@@ -362,6 +399,7 @@ async fn run(
     monitor.shutdown().await;
     dhcp_runner.shutdown().await;
     dns_runner.shutdown().await;
+    update_runner.shutdown().await;
     if let Some(detector) = device_detector {
         detector.shutdown().await;
     }

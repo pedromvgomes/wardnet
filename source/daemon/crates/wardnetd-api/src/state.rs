@@ -5,7 +5,7 @@ use wardnetd_services::dns::server::DnsServer;
 use wardnetd_services::event::EventPublisher;
 use wardnetd_services::{
     AuthService, DeviceDiscoveryService, DeviceService, DhcpService, DnsService, JobService,
-    LogService, RoutingService, SystemService, TunnelService, VpnProviderService,
+    LogService, RoutingService, SystemService, TunnelService, UpdateService, VpnProviderService,
 };
 
 /// Shared application state, cheaply cloneable via `Arc`.
@@ -28,6 +28,7 @@ struct Inner {
     routing_service: Arc<dyn RoutingService>,
     system_service: Arc<dyn SystemService>,
     tunnel_service: Arc<dyn TunnelService>,
+    update_service: Arc<dyn UpdateService>,
     dhcp_server: Arc<dyn DhcpServer>,
     dns_server: Arc<dyn DnsServer>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -48,6 +49,7 @@ impl AppState {
         routing_service: Arc<dyn RoutingService>,
         system_service: Arc<dyn SystemService>,
         tunnel_service: Arc<dyn TunnelService>,
+        update_service: Arc<dyn UpdateService>,
         dhcp_server: Arc<dyn DhcpServer>,
         dns_server: Arc<dyn DnsServer>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -65,6 +67,7 @@ impl AppState {
                 routing_service,
                 system_service,
                 tunnel_service,
+                update_service,
                 dhcp_server,
                 dns_server,
                 event_publisher,
@@ -126,6 +129,12 @@ impl AppState {
     #[must_use]
     pub fn tunnel_service(&self) -> &dyn TunnelService {
         self.inner.tunnel_service.as_ref()
+    }
+
+    /// Access the auto-update service.
+    #[must_use]
+    pub fn update_service(&self) -> &dyn UpdateService {
+        self.inner.update_service.as_ref()
     }
 
     #[must_use]

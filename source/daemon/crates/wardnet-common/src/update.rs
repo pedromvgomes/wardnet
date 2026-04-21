@@ -29,8 +29,10 @@ impl UpdateChannel {
         }
     }
 
+    /// Parse a string form. Named `parse_opt` to avoid shadowing
+    /// `std::str::FromStr::from_str`.
     #[must_use]
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse_opt(value: &str) -> Option<Self> {
         match value {
             "stable" => Some(Self::Stable),
             "beta" => Some(Self::Beta),
@@ -40,10 +42,11 @@ impl UpdateChannel {
 }
 
 /// Phase of an in-flight update install.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 pub enum InstallPhase {
     /// No install in progress.
+    #[default]
     Idle,
     /// Resolving the manifest for the target channel.
     Checking,
@@ -61,12 +64,6 @@ pub enum InstallPhase {
     Applied,
     /// Install failed — message contains the reason.
     Failed { reason: String },
-}
-
-impl Default for InstallPhase {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 /// Release metadata fetched from the release source.
@@ -121,8 +118,10 @@ impl UpdateHistoryStatus {
         }
     }
 
+    /// Parse a string form. Named `parse_opt` to avoid shadowing
+    /// `std::str::FromStr::from_str`.
     #[must_use]
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse_opt(value: &str) -> Option<Self> {
         match value {
             "started" => Some(Self::Started),
             "succeeded" => Some(Self::Succeeded),

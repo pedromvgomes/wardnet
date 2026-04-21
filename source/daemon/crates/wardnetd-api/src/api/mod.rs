@@ -10,6 +10,7 @@ pub mod providers;
 pub mod setup;
 pub mod system;
 pub mod tunnels;
+pub mod update;
 
 #[cfg(test)]
 mod tests;
@@ -104,7 +105,13 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/dns/rules/{id}",
             put(dns::update_filter_rule).delete(dns::delete_filter_rule),
-        );
+        )
+        .route("/update/status", get(update::status))
+        .route("/update/check", post(update::check))
+        .route("/update/install", post(update::install))
+        .route("/update/rollback", post(update::rollback))
+        .route("/update/config", put(update::update_config))
+        .route("/update/history", get(update::history));
 
     Router::new()
         .nest("/api", api)

@@ -10,7 +10,9 @@ describe("GetStarted", () => {
 
   it("renders the install command", () => {
     render(<GetStarted />);
-    expect(screen.getByText("curl -sSL https://wardnet.network/install.sh | bash")).toBeInTheDocument();
+    expect(
+      screen.getByText("curl -sSL https://wardnet.network/install.sh | sudo bash"),
+    ).toBeInTheDocument();
   });
 
   it("renders the GitHub link", () => {

@@ -11,6 +11,7 @@ import {
   DnsService,
   JobsService,
   LogService,
+  UpdateService,
 } from "@wardnet/js";
 
 /** Shared SDK client instance. All services use this single client. */
@@ -27,3 +28,4 @@ export const dhcpService = new DhcpService(client);
 export const dnsService = new DnsService(client);
 export const jobsService = new JobsService(client);
 export const logService = new LogService(client, window.location.origin);
+export const updateService = new UpdateService(client);

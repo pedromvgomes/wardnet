@@ -2,6 +2,11 @@
 Description=Wardnet Daemon
 After=network-online.target
 Wants=network-online.target
+# If the daemon crash-loops after an auto-update, the on-failure unit
+# rolls the binary back to <live>.old. `OnFailure=` fires when the unit
+# enters `failed` state, which the StartLimit* knobs below guarantee
+# after 3 crashes within 120s.
+OnFailure=wardnetd-rollback.service
 
 [Service]
 Type=simple
@@ -10,6 +15,15 @@ Group=wardnet
 ExecStart=/usr/local/bin/wardnetd --config /etc/wardnet/wardnet.toml
 Restart=always
 RestartSec=2s
+# Auto-update crash-loop budget. If the daemon fails to stay up for 3
+# restarts within 120s, systemd marks the unit as failed and the
+# OnFailure= rollback unit kicks in. `StartLimitAction=none` avoids
+# systemd's default aggressive stop once the budget is exhausted — we
+# let the rollback unit swap the binary back, then manual recovery
+# (or the next update check) takes over.
+StartLimitIntervalSec=120
+StartLimitBurst=3
+StartLimitAction=none
 
 # Capabilities — inherited by all child processes (ip, nft, sysctl)
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
@@ -19,7 +33,10 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/wardnet /etc/wardnet/keys /var/log/wardnet
+# `/usr/local/bin` is writable so the auto-update runner can atomically
+# rename the staged binary into place. The daemon user owns the binary
+# (install.sh chowns it) so no root-only step is needed.
+ReadWritePaths=/var/lib/wardnet /etc/wardnet/keys /var/log/wardnet /usr/local/bin
 PrivateTmp=yes
 
 # Logging to journal

@@ -70,6 +70,7 @@ fn build_state(job_service: Arc<dyn JobService>) -> AppState {
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(StubTunnelService),
+        Arc::new(crate::tests::stubs::StubUpdateService),
         Arc::new(StubDhcpServer),
         Arc::new(StubDnsServer),
         Arc::new(StubEventPublisher),

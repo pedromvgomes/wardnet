@@ -4,8 +4,8 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "yarn generate:release-manifests && tsc -b && vite build && cp dist/index.html dist/404.html",
+    "dev": "yarn copy:install-script && vite",
+    "build": "yarn generate:release-manifests && yarn copy:install-script && tsc -b && vite build && cp dist/index.html dist/404.html",
     "preview": "vite preview",
     "type-check": "yarn generate:release-manifests && tsc -b",
     "test": "yarn generate:release-manifests && vitest run",
@@ -13,14 +13,17 @@
     "test:coverage": "yarn generate:release-manifests && vitest run --coverage",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.ts\"",
-    "generate:release-manifests": "tsx scripts/generate-release-manifests.ts"
+    "generate:release-manifests": "tsx scripts/generate-release-manifests.ts",
+    "copy:install-script": "mkdir -p public && cp ../../deploy/install.sh public/install.sh"
   },
   "dependencies": {
     "@fontsource-variable/geist": "5.2.8",
     "lucide-react": "1.8.0",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "react-router": "7.14.1"
+    "react-markdown": "10.1.0",
+    "react-router": "7.14.1",
+    "remark-gfm": "4.0.1"
   },
   "devDependencies": {
     "@modyfi/vite-plugin-yaml": "1.1.1",

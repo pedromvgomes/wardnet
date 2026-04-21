@@ -92,13 +92,20 @@ jobs:
       matrix:
         include:
           # Raspberry Pi and other aarch64 Linux boards.
+          # `arch` is the short-form name embedded in release asset filenames
+          # (`wardnetd-<version>-<arch>.tar.gz`) — only Linux targets ship, so
+          # the full `<arch>-unknown-linux-gnu` triple would just be noise for
+          # users. The daemon's auto-update runner constructs the tarball URL
+          # using this same short form (see `wardnetd_services::update::short_arch`).
           - target: aarch64-unknown-linux-gnu
+            arch: aarch64
             runner: ubuntu-latest
             cross_apt_packages: gcc-aarch64-linux-gnu
             strip: aarch64-linux-gnu-strip
           # Non-Pi Linux hosts (mini-PCs, x86_64 servers, etc.). Built natively
           # on the x86_64 runner, no cross-linker needed.
           - target: x86_64-unknown-linux-gnu
+            arch: x86_64
             runner: ubuntu-latest
             cross_apt_packages: ""
             strip: strip
@@ -148,6 +155,7 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
           MINISIGN_KEY_B64: ${{ secrets.WARDNET_MINISIGN_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.WARDNET_MINISIGN_PASSWORD }}
         run: |
@@ -158,7 +166,10 @@ jobs:
             exit 1
           fi
 
-          BASENAME="wardnetd-${VERSION}-${TARGET}"
+          # Asset naming: short arch only (no OS/vendor suffix) — everything
+          # we ship is Linux. The daemon's auto-update runner builds the same
+          # filename from `short_arch(target_triple)`; see release.yml matrix.
+          BASENAME="wardnetd-${VERSION}-${ARCH}"
           TARBALL="${BASENAME}.tar.gz"
           SHA256_FILE="${TARBALL}.sha256"
           MINISIG_FILE="${TARBALL}.minisig"

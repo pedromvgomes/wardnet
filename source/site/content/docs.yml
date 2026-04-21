@@ -12,26 +12,32 @@ recommended:
       latest release, configure the daemon, and start protecting your
       network with a single command.
 
-  - slug: device-routing
-    title: Device routing
-    icon: route
+  - slug: first-run
+    title: First-time setup
+    icon: sparkles
     excerpt: >
-      Learn how to assign each device on your network to a specific VPN
-      tunnel, direct internet access, or the network default. Routing
-      changes take effect immediately — no restarts required.
+      After the installer finishes, the web UI walks you through creating
+      the admin account and connecting your first tunnel. This guide
+      walks you through the setup wizard step by step.
 
-  - slug: dhcp-server
-    title: DHCP server
-    icon: network
+  - slug: configuration
+    title: Configuration reference
+    icon: settings
     excerpt: >
-      Enable the built-in DHCP server to automatically discover and manage
-      devices as they join your network. No manual IP configuration needed.
+      Every option in wardnet.toml — database, logging, networking,
+      auto-update, observability — with its default and when you would
+      want to change it.
 
 topics:
   - slug: installation
     title: Installation
     icon: download
     description: Download, install, and run Wardnet on a Raspberry Pi.
+
+  - slug: first-run
+    title: First-time setup
+    icon: sparkles
+    description: Walk through the setup wizard after the installer finishes.
 
   - slug: configuration
     title: Configuration

@@ -32,7 +32,10 @@ use wardnetd_services::dns::blocklist_downloader::HttpBlocklistFetcher;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
-use wardnetd_services::{Backends, init_services_with_factory};
+use wardnetd_services::update::{
+    EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier,
+};
+use wardnetd_services::{Backends, UpdateBackends, init_services_with_factory};
 
 /// Wardnet mock daemon — local HTTP API for web-ui development.
 #[derive(Parser, Debug)]
@@ -105,6 +108,7 @@ async fn main() -> anyhow::Result<()> {
     run(cli, config, log_service).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run(
     cli: Cli,
     config: ApplicationConfiguration,
@@ -140,8 +144,27 @@ async fn run(
     // No-op backends are used only for subsystems that require Linux kernel
     // APIs unavailable on macOS (WireGuard, netlink routing, nftables, pnet
     // capture). Anything that works cross-platform — like HTTP blocklist
-    // fetches — uses the real implementation so dev testing exercises the
-    // actual code path.
+    // fetches and the auto-update pipeline — uses the real implementation so
+    // dev testing exercises the actual code path. The auto-update applier is
+    // pointed at `/tmp/wardnet-mock/...` so a manually triggered install
+    // stages and renames files in a throwaway directory instead of clobbering
+    // the dev system binary.
+    let mock_update_dir = std::env::temp_dir().join("wardnet-mock");
+    let update_backends = UpdateBackends {
+        release_source: Arc::new(
+            HttpsManifestSource::new(
+                &config.update.manifest_base_url,
+                wardnetd_services::update::short_arch(std::env::consts::ARCH).unwrap_or("aarch64"),
+                std::time::Duration::from_secs(config.update.http_timeout_secs),
+            )
+            .expect("failed to build mock release source"),
+        ),
+        verifier: Arc::new(Sha256MinisignVerifier::new(EMBEDDED_PUBLIC_KEY)),
+        applier: Arc::new(FsBinaryApplier::new(
+            mock_update_dir.join("wardnetd"),
+            mock_update_dir.join("staging"),
+        )),
+    };
     let backends = Backends {
         tunnel_interface: Arc::new(NoopTunnelInterface),
         policy_router: Arc::new(NoopPolicyRouter),
@@ -150,6 +173,7 @@ async fn run(
         hostname_resolver: Arc::new(NoopHostnameResolver),
         key_store: Arc::new(InMemoryKeyStore::default()),
         blocklist_fetcher: Arc::new(HttpBlocklistFetcher::new()),
+        update: update_backends,
     };
 
     // A synthetic LAN IP that looks plausible in UI copy.
@@ -182,6 +206,7 @@ async fn run(
         services.routing.clone(),
         services.system.clone(),
         services.tunnel.clone(),
+        services.update.clone(),
         dhcp_server,
         dns_server,
         services.event_publisher.clone(),

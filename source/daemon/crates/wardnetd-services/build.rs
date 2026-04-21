@@ -3,6 +3,7 @@
 //! Sets the `WARDNET_VERSION` compile-time environment variable used by
 //! `version.rs`.
 
+use std::env;
 use std::process::Command;
 
 include!("../../build-support/version.rs");
@@ -10,8 +11,14 @@ include!("../../build-support/version.rs");
 fn main() {
     println!("cargo:rerun-if-changed=../../../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../../../.git/refs/");
+    // Rebuild when the dev override env var flips; this lets local auto-update
+    // testing pin the daemon to an older version without touching git tags.
+    println!("cargo:rerun-if-env-changed=WARDNET_VERSION_OVERRIDE");
 
-    let version = git_version().unwrap_or_else(cargo_pkg_version);
+    let version = env::var("WARDNET_VERSION_OVERRIDE")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| git_version().unwrap_or_else(cargo_pkg_version));
     println!("cargo:rustc-env=WARDNET_VERSION={version}");
 }
 

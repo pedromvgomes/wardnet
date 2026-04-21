@@ -70,6 +70,7 @@ fn make_state(auth: impl AuthService + 'static) -> AppState {
         Arc::new(StubRoutingService),
         Arc::new(StubSystemService),
         Arc::new(StubTunnelService),
+        Arc::new(crate::tests::stubs::StubUpdateService),
         Arc::new(StubDhcpServer),
         Arc::new(StubDnsServer),
         Arc::new(StubEventPublisher),

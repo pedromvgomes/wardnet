@@ -12,7 +12,7 @@ export function GetStarted() {
         <div className="mb-6 flex justify-center">
           <LatestReleaseBadge />
         </div>
-        <CodeBlock code="curl -sSL https://wardnet.network/install.sh | bash" />
+        <CodeBlock code="curl -sSL https://wardnet.network/install.sh | sudo bash" />
         <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
           Or clone from GitHub and build from source.
         </p>
