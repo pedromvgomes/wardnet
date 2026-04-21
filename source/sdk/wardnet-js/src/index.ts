@@ -102,6 +102,24 @@ export { DnsService } from "./services/dns.js";
 // Services — auto-update
 export { UpdateService } from "./services/update.js";
 
+// Services — backup
+export { BackupService } from "./services/backup.js";
+
+// Types — backup
+export type {
+  BundleManifest,
+  RestorePhase,
+  BackupStatus,
+  SnapshotKind,
+  LocalSnapshot,
+  BackupStatusResponse,
+  ExportBackupRequest,
+  RestorePreviewResponse,
+  ApplyImportRequest,
+  ApplyImportResponse,
+  ListSnapshotsResponse,
+} from "./types/backup.js";
+
 // Types — auto-update
 export type {
   UpdateChannel,
