@@ -2,21 +2,49 @@ use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::{Path, State};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use uuid::Uuid;
 use wardnet_common::api::{
-    DeviceDetailResponse, DeviceMeResponse, DeviceWithStatus, ListDevicesResponse,
+    ApiError, DeviceDetailResponse, DeviceMeResponse, DeviceWithStatus, ListDevicesResponse,
     SetMyRuleRequest, SetMyRuleResponse, UpdateDeviceRequest,
 };
 use wardnet_common::device::DhcpStatus;
 
 use crate::api::middleware::{AdminAuth, ClientIp};
+use crate::api::responses::{AuthErrors, BadRequest, NotFound};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
+
+/// Register device routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(list_devices))
+        .routes(routes!(get_me))
+        .routes(routes!(set_my_rule))
+        .routes(routes!(get_device, update_device))
+}
+
+const TAG: &str = "devices";
+const PATH_ME: &str = "/api/devices/me";
+const PATH_ME_RULE: &str = "/api/devices/me/rule";
+const PATH_LIST: &str = "/api/devices";
+const PATH_ITEM: &str = "/api/devices/{id}";
 
 /// GET /api/devices/me
 ///
 /// Thin handler — identifies the caller by source IP and returns their
 /// device info and current routing rule. No authentication required.
+#[utoipa::path(
+    get,
+    path = PATH_ME,
+    tag = TAG,
+    responses(
+        (status = 200, description = "Caller device info and available tunnels", body = DeviceMeResponse),
+        (status = 500, description = "Internal server error", body = ApiError),
+    ),
+    security(()),
+)]
 pub async fn get_me(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
@@ -56,6 +84,19 @@ pub async fn get_me(
 /// Thin handler — allows the caller to set their own routing rule.
 /// Delegates admin-lock checks to [`DeviceService`](wardnetd_services::DeviceService).
 /// No authentication required (self-service by IP).
+#[utoipa::path(
+    put,
+    path = PATH_ME_RULE,
+    tag = TAG,
+    request_body = SetMyRuleRequest,
+    responses(
+        (status = 200, description = "Updated caller routing rule", body = SetMyRuleResponse),
+        (status = 400, description = "Malformed request body", body = ApiError),
+        (status = 403, description = "Device is admin-locked", body = ApiError),
+        (status = 500, description = "Internal server error", body = ApiError),
+    ),
+    security(()),
+)]
 pub async fn set_my_rule(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
@@ -106,6 +147,19 @@ fn enrich_device(
 }
 
 /// GET /api/devices — List all devices (admin only).
+#[utoipa::path(
+    get,
+    path = PATH_LIST,
+    tag = TAG,
+    responses(
+        (status = 200, description = "List of devices with DHCP status", body = ListDevicesResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_devices(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -122,6 +176,22 @@ pub async fn list_devices(
 }
 
 /// GET /api/devices/:id — Get device detail with routing rule (admin only).
+#[utoipa::path(
+    get,
+    path = PATH_ITEM,
+    tag = TAG,
+    params(("id" = Uuid, Path, description = "Device ID")),
+    responses(
+        (status = 200, description = "Device detail", body = DeviceDetailResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn get_device(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -149,6 +219,23 @@ pub async fn get_device(
 ///
 /// Supports updating name, device type, routing target, and admin-locked flag.
 /// Each field is optional; only provided fields are changed.
+#[utoipa::path(
+    put,
+    path = PATH_ITEM,
+    tag = TAG,
+    params(("id" = Uuid, Path, description = "Device ID")),
+    request_body = UpdateDeviceRequest,
+    responses(
+        (status = 200, description = "Updated device detail", body = DeviceDetailResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_device(
     State(state): State<AppState>,
     _auth: AdminAuth,

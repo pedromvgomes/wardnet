@@ -1,5 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use wardnet_common::api::{
     ListCountriesResponse, ListProvidersResponse, ListServersRequest, ListServersResponse,
     SetupProviderRequest, SetupProviderResponse, ValidateCredentialsRequest,
@@ -7,10 +9,34 @@ use wardnet_common::api::{
 };
 
 use crate::api::middleware::AdminAuth;
+use crate::api::responses::{AuthErrors, BadRequest, NotFound};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
 
+/// Register VPN provider routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(list_providers))
+        .routes(routes!(validate_credentials))
+        .routes(routes!(list_countries))
+        .routes(routes!(list_servers))
+        .routes(routes!(setup_tunnel))
+}
+
 /// GET /api/providers -- list all registered VPN providers.
+#[utoipa::path(
+    get,
+    path = "/api/providers",
+    tag = "providers",
+    responses(
+        (status = 200, description = "Registered VPN providers", body = ListProvidersResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_providers(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -20,6 +46,23 @@ pub async fn list_providers(
 }
 
 /// POST /api/providers/{id}/validate -- validate credentials for a provider.
+#[utoipa::path(
+    post,
+    path = "/api/providers/{id}/validate",
+    tag = "providers",
+    params(("id" = String, Path, description = "Provider ID")),
+    request_body = ValidateCredentialsRequest,
+    responses(
+        (status = 200, description = "Validation result", body = ValidateCredentialsResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn validate_credentials(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -34,6 +77,21 @@ pub async fn validate_credentials(
 }
 
 /// GET /api/providers/{id}/countries -- list countries where a provider has servers.
+#[utoipa::path(
+    get,
+    path = "/api/providers/{id}/countries",
+    tag = "providers",
+    params(("id" = String, Path, description = "Provider ID")),
+    responses(
+        (status = 200, description = "Countries with available servers", body = ListCountriesResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_countries(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -44,6 +102,23 @@ pub async fn list_countries(
 }
 
 /// POST /api/providers/{id}/servers -- list available servers (POST because body contains credentials).
+#[utoipa::path(
+    post,
+    path = "/api/providers/{id}/servers",
+    tag = "providers",
+    params(("id" = String, Path, description = "Provider ID")),
+    request_body = ListServersRequest,
+    responses(
+        (status = 200, description = "Available servers", body = ListServersResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_servers(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -55,6 +130,23 @@ pub async fn list_servers(
 }
 
 /// POST /api/providers/{id}/setup -- full guided tunnel setup through a provider.
+#[utoipa::path(
+    post,
+    path = "/api/providers/{id}/setup",
+    tag = "providers",
+    params(("id" = String, Path, description = "Provider ID")),
+    request_body = SetupProviderRequest,
+    responses(
+        (status = 200, description = "Guided tunnel setup result", body = SetupProviderResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn setup_tunnel(
     State(state): State<AppState>,
     _auth: AdminAuth,

@@ -7,6 +7,7 @@ pub mod jobs;
 pub mod logs_ws;
 pub mod middleware;
 pub mod providers;
+pub mod responses;
 pub mod setup;
 pub mod system;
 pub mod tunnels;
@@ -19,9 +20,10 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::http;
-use axum::routing::{delete, get, post, put};
+use axum::routing::get;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use utoipa_axum::router::OpenApiRouter;
 
 use crate::state::AppState;
 use crate::web::static_handler;
@@ -30,91 +32,44 @@ use wardnetd_services::request_context::RequestContextLayer;
 
 /// Build the complete application router.
 ///
+/// Each module under `api/` owns its own `register(router)` function that
+/// attaches its annotated handlers via `utoipa_axum::routes!`. This keeps the
+/// HTTP path declared in exactly one place — the handler's `#[utoipa::path]`
+/// attribute — and contains route-registration alongside the handlers instead
+/// of concentrating it here.
+///
 /// Assembles all API routes under `/api/`, applies middleware (CORS, tracing),
 /// and falls back to the embedded static file handler for the web UI.
-#[allow(clippy::too_many_lines)]
 pub fn router(state: AppState) -> Router {
-    let api = Router::new()
-        .route("/auth/login", post(auth::login))
-        .route("/devices", get(devices::list_devices))
-        .route("/devices/me", get(devices::get_me))
-        .route("/devices/me/rule", put(devices::set_my_rule))
-        .route(
-            "/devices/{id}",
-            get(devices::get_device).put(devices::update_device),
-        )
-        .route("/info", get(info::info))
-        .route("/jobs/{id}", get(jobs::get_job))
-        .route("/setup/status", get(setup::setup_status))
-        .route("/setup", post(setup::setup))
-        .route("/system/status", get(system::status))
-        .route("/system/errors", get(system::recent_errors))
-        .route("/system/logs/stream", get(logs_ws::logs_ws))
-        .route("/system/logs/download", get(system::download_logs))
-        .route(
-            "/tunnels",
-            get(tunnels::list_tunnels).post(tunnels::create_tunnel),
-        )
-        .route("/tunnels/{id}", delete(tunnels::delete_tunnel))
-        .route("/providers", get(providers::list_providers))
-        .route(
-            "/providers/{id}/validate",
-            post(providers::validate_credentials),
-        )
-        .route("/providers/{id}/countries", get(providers::list_countries))
-        .route("/providers/{id}/servers", post(providers::list_servers))
-        .route("/providers/{id}/setup", post(providers::setup_tunnel))
-        .route(
-            "/dhcp/config",
-            get(dhcp::get_config).put(dhcp::update_config),
-        )
-        .route("/dhcp/config/toggle", post(dhcp::toggle))
-        .route("/dhcp/leases", get(dhcp::list_leases))
-        .route("/dhcp/leases/{id}", delete(dhcp::revoke_lease))
-        .route(
-            "/dhcp/reservations",
-            get(dhcp::list_reservations).post(dhcp::create_reservation),
-        )
-        .route("/dhcp/reservations/{id}", delete(dhcp::delete_reservation))
-        .route("/dhcp/status", get(dhcp::status))
-        .route("/dns/config", get(dns::get_config).put(dns::update_config))
-        .route("/dns/config/toggle", post(dns::toggle))
-        .route("/dns/status", get(dns::status))
-        .route("/dns/cache/flush", post(dns::flush_cache))
-        .route(
-            "/dns/blocklists",
-            get(dns::list_blocklists).post(dns::create_blocklist),
-        )
-        .route(
-            "/dns/blocklists/{id}",
-            put(dns::update_blocklist).delete(dns::delete_blocklist),
-        )
-        .route(
-            "/dns/blocklists/{id}/update",
-            post(dns::update_blocklist_now),
-        )
-        .route(
-            "/dns/allowlist",
-            get(dns::list_allowlist).post(dns::create_allowlist_entry),
-        )
-        .route("/dns/allowlist/{id}", delete(dns::delete_allowlist_entry))
-        .route(
-            "/dns/rules",
-            get(dns::list_filter_rules).post(dns::create_filter_rule),
-        )
-        .route(
-            "/dns/rules/{id}",
-            put(dns::update_filter_rule).delete(dns::delete_filter_rule),
-        )
-        .route("/update/status", get(update::status))
-        .route("/update/check", post(update::check))
-        .route("/update/install", post(update::install))
-        .route("/update/rollback", post(update::rollback))
-        .route("/update/config", put(update::update_config))
-        .route("/update/history", get(update::history));
+    // Build the OpenAPI-aware router by letting each module register its own
+    // handlers. Order is purely cosmetic — it controls the grouping in the
+    // generated docs.
+    //
+    // TODO(openapi docs mount): Commit 3 will consume `_openapi` to expose the
+    // generated schema behind `/api/docs`.
+    let mut api_router = OpenApiRouter::<AppState>::new();
+    api_router = auth::register(api_router);
+    api_router = setup::register(api_router);
+    api_router = info::register(api_router);
+    api_router = devices::register(api_router);
+    api_router = tunnels::register(api_router);
+    api_router = providers::register(api_router);
+    api_router = dhcp::register(api_router);
+    api_router = dns::register(api_router);
+    api_router = system::register(api_router);
+    api_router = jobs::register(api_router);
+    api_router = update::register(api_router);
+
+    let (api_router, _openapi) = api_router.split_for_parts();
+
+    // Handler `#[utoipa::path(path = "/api/...")]` declares the full path, so
+    // the generated axum router already routes under `/api/*`. WebSocket
+    // endpoints cannot be modeled in OpenAPI; attach them to the generated
+    // axum router as a plain route (using the full path for consistency).
+    let api_router = api_router.route("/api/system/logs/stream", get(logs_ws::logs_ws));
 
     Router::new()
-        .nest("/api", api)
+        .merge(api_router)
         .fallback(static_handler)
         .layer(AuthContextLayer)
         .layer(RequestContextLayer)

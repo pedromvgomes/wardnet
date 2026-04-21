@@ -1,6 +1,8 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use uuid::Uuid;
 use wardnet_common::api::{
     CreateAllowlistRequest, CreateAllowlistResponse, CreateBlocklistRequest,
@@ -14,10 +16,40 @@ use wardnet_common::api::{
 use wardnet_common::jobs::JobDispatchedResponse;
 
 use crate::api::middleware::AdminAuth;
+use crate::api::responses::{AuthErrors, BadRequest, NotFound};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
 
+/// Register DNS routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(get_config, update_config))
+        .routes(routes!(toggle))
+        .routes(routes!(status))
+        .routes(routes!(flush_cache))
+        .routes(routes!(list_blocklists, create_blocklist))
+        .routes(routes!(update_blocklist, delete_blocklist))
+        .routes(routes!(update_blocklist_now))
+        .routes(routes!(list_allowlist, create_allowlist_entry))
+        .routes(routes!(delete_allowlist_entry))
+        .routes(routes!(list_filter_rules, create_filter_rule))
+        .routes(routes!(update_filter_rule, delete_filter_rule))
+}
+
 /// GET /api/dns/config
+#[utoipa::path(
+    get,
+    path = "/api/dns/config",
+    tag = "dns",
+    responses(
+        (status = 200, description = "Current DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn get_config(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -27,6 +59,21 @@ pub async fn get_config(
 }
 
 /// PUT /api/dns/config
+#[utoipa::path(
+    put,
+    path = "/api/dns/config",
+    tag = "dns",
+    request_body = UpdateDnsConfigRequest,
+    responses(
+        (status = 200, description = "Updated DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_config(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -37,6 +84,21 @@ pub async fn update_config(
 }
 
 /// POST /api/dns/config/toggle
+#[utoipa::path(
+    post,
+    path = "/api/dns/config/toggle",
+    tag = "dns",
+    request_body = ToggleDnsRequest,
+    responses(
+        (status = 200, description = "Updated DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn toggle(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -57,6 +119,19 @@ pub async fn toggle(
 }
 
 /// GET /api/dns/status
+#[utoipa::path(
+    get,
+    path = "/api/dns/status",
+    tag = "dns",
+    responses(
+        (status = 200, description = "DNS server status and cache stats", body = DnsStatusResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn status(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -73,6 +148,19 @@ pub async fn status(
 }
 
 /// POST /api/dns/cache/flush
+#[utoipa::path(
+    post,
+    path = "/api/dns/cache/flush",
+    tag = "dns",
+    responses(
+        (status = 200, description = "Cache flushed", body = DnsCacheFlushResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn flush_cache(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -89,6 +177,19 @@ pub async fn flush_cache(
 // ---------------------------------------------------------------------------
 
 /// GET /api/dns/blocklists
+#[utoipa::path(
+    get,
+    path = "/api/dns/blocklists",
+    tag = "dns",
+    responses(
+        (status = 200, description = "List of blocklists", body = ListBlocklistsResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_blocklists(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -98,6 +199,21 @@ pub async fn list_blocklists(
 }
 
 /// POST /api/dns/blocklists
+#[utoipa::path(
+    post,
+    path = "/api/dns/blocklists",
+    tag = "dns",
+    request_body = CreateBlocklistRequest,
+    responses(
+        (status = 201, description = "Blocklist created", body = CreateBlocklistResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -108,6 +224,23 @@ pub async fn create_blocklist(
 }
 
 /// PUT /api/dns/blocklists/{id}
+#[utoipa::path(
+    put,
+    path = "/api/dns/blocklists/{id}",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    request_body = UpdateBlocklistRequest,
+    responses(
+        (status = 200, description = "Updated blocklist", body = UpdateBlocklistResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -119,6 +252,21 @@ pub async fn update_blocklist(
 }
 
 /// DELETE /api/dns/blocklists/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/blocklists/{id}",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    responses(
+        (status = 200, description = "Blocklist deleted", body = DeleteBlocklistResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -131,6 +279,21 @@ pub async fn delete_blocklist(
 /// POST /api/dns/blocklists/{id}/update — dispatches a background job that
 /// fetches, parses, and stores the blocklist. Returns 202 Accepted with the
 /// job id so the client can poll `GET /api/jobs/:id` for progress.
+#[utoipa::path(
+    post,
+    path = "/api/dns/blocklists/{id}/update",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    responses(
+        (status = 202, description = "Background update job dispatched", body = JobDispatchedResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_blocklist_now(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -145,6 +308,19 @@ pub async fn update_blocklist_now(
 // ---------------------------------------------------------------------------
 
 /// GET /api/dns/allowlist
+#[utoipa::path(
+    get,
+    path = "/api/dns/allowlist",
+    tag = "dns",
+    responses(
+        (status = 200, description = "List of allowlist entries", body = ListAllowlistResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_allowlist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -154,6 +330,21 @@ pub async fn list_allowlist(
 }
 
 /// POST /api/dns/allowlist
+#[utoipa::path(
+    post,
+    path = "/api/dns/allowlist",
+    tag = "dns",
+    request_body = CreateAllowlistRequest,
+    responses(
+        (status = 201, description = "Allowlist entry created", body = CreateAllowlistResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_allowlist_entry(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -164,6 +355,21 @@ pub async fn create_allowlist_entry(
 }
 
 /// DELETE /api/dns/allowlist/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/allowlist/{id}",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Allowlist entry ID")),
+    responses(
+        (status = 200, description = "Allowlist entry deleted", body = DeleteAllowlistResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_allowlist_entry(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -178,6 +384,19 @@ pub async fn delete_allowlist_entry(
 // ---------------------------------------------------------------------------
 
 /// GET /api/dns/rules
+#[utoipa::path(
+    get,
+    path = "/api/dns/rules",
+    tag = "dns",
+    responses(
+        (status = 200, description = "List of custom filter rules", body = ListFilterRulesResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_filter_rules(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -187,6 +406,21 @@ pub async fn list_filter_rules(
 }
 
 /// POST /api/dns/rules
+#[utoipa::path(
+    post,
+    path = "/api/dns/rules",
+    tag = "dns",
+    request_body = CreateFilterRuleRequest,
+    responses(
+        (status = 201, description = "Filter rule created", body = CreateFilterRuleResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -197,6 +431,23 @@ pub async fn create_filter_rule(
 }
 
 /// PUT /api/dns/rules/{id}
+#[utoipa::path(
+    put,
+    path = "/api/dns/rules/{id}",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Filter rule ID")),
+    request_body = UpdateFilterRuleRequest,
+    responses(
+        (status = 200, description = "Updated filter rule", body = UpdateFilterRuleResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -208,6 +459,21 @@ pub async fn update_filter_rule(
 }
 
 /// DELETE /api/dns/rules/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/rules/{id}",
+    tag = "dns",
+    params(("id" = Uuid, Path, description = "Filter rule ID")),
+    responses(
+        (status = 200, description = "Filter rule deleted", body = DeleteFilterRuleResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,
