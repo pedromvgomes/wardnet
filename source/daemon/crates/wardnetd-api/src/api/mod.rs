@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod backup;
 pub mod devices;
 pub mod dhcp;
 pub mod dns;
@@ -51,6 +52,7 @@ pub(crate) fn build_openapi_router() -> OpenApiRouter<AppState> {
     r = system::register(r);
     r = jobs::register(r);
     r = update::register(r);
+    r = backup::register(r);
     r
 }
 
