@@ -210,17 +210,6 @@ async function writeManifest(path: string, manifest: Manifest | null): Promise<v
  * predating the OpenAPI publishing step will simply not appear.
  */
 async function buildOpenapiVersions(releases: GithubRelease[]): Promise<OpenapiVersion[]> {
-  // Map: sha256 -> group accumulator.
-  const groups = new Map<
-    string,
-    {
-      sha256: string;
-      openapi_url: string;
-      versions: { version: string; parsed: semver.SemVer }[];
-      includes_prerelease: boolean;
-    }
-  >();
-
   // Walk releases newest-first so the first URL we record for a given
   // hash is the newest — stable enough for a human-friendly link.
   const ordered = releases
@@ -232,25 +221,58 @@ async function buildOpenapiVersions(releases: GithubRelease[]): Promise<OpenapiV
     );
   ordered.sort((a, b) => semver.rcompare(a.version, b.version));
 
-  for (const { release, version } of ordered) {
-    const json = release.assets.find((a) => a.name === "openapi.json");
-    const sha = release.assets.find((a) => a.name === "openapi.json.sha256");
-    if (!json || !sha) continue;
+  // Keep only entries that actually carry the openapi assets, then fan out
+  // the sha256 fetches in parallel. One round-trip per release but bounded
+  // by the browser/runtime's default concurrent-connection limit — the
+  // previous `for await` serialisation made site builds linear in release
+  // count for no good reason.
+  const candidates = ordered
+    .map(({ release, version }) => ({
+      release,
+      version,
+      json: release.assets.find((a) => a.name === "openapi.json"),
+      sha: release.assets.find((a) => a.name === "openapi.json.sha256"),
+    }))
+    .filter(
+      (c): c is typeof c & { json: NonNullable<typeof c.json>; sha: NonNullable<typeof c.sha> } =>
+        c.json !== undefined && c.sha !== undefined,
+    );
 
-    let hash: string;
-    try {
+  const settled = await Promise.allSettled(
+    candidates.map(async ({ release, version, json, sha }) => {
       const resp = await fetch(sha.browser_download_url);
       if (!resp.ok) {
-        console.warn(
-          `openapi-versions: skipping ${release.tag_name}: sha256 fetch failed (${resp.status})`,
-        );
-        continue;
+        throw new Error(`sha256 fetch failed (${resp.status})`);
       }
-      hash = (await resp.text()).trim().split(/\s+/)[0]!.toLowerCase();
-    } catch (err) {
-      console.warn(`openapi-versions: skipping ${release.tag_name}: ${(err as Error).message}`);
+      const hash = (await resp.text()).trim().split(/\s+/)[0]!.toLowerCase();
+      return { release, version, json, hash };
+    }),
+  );
+
+  // Map: sha256 -> group accumulator. Iterated in release order so the
+  // first `openapi_url` recorded per hash is the newest — preserves the
+  // original "newest link for this spec" invariant.
+  const groups = new Map<
+    string,
+    {
+      sha256: string;
+      openapi_url: string;
+      versions: { version: string; parsed: semver.SemVer }[];
+      includes_prerelease: boolean;
+    }
+  >();
+
+  for (let i = 0; i < settled.length; i++) {
+    const outcome = settled[i]!;
+    if (outcome.status === "rejected") {
+      console.warn(
+        `openapi-versions: skipping ${candidates[i]!.release.tag_name}: ${
+          (outcome.reason as Error).message
+        }`,
+      );
       continue;
     }
+    const { release, version, json, hash } = outcome.value;
 
     const existing = groups.get(hash);
     if (existing) {

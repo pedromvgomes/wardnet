@@ -112,12 +112,29 @@ pub async fn toggle(
     let enabled = body.enabled;
     let response = state.dns_service().toggle(body).await?;
 
-    if enabled {
-        if let Err(e) = state.dns_server().start().await {
-            tracing::error!(error = %e, "failed to start DNS server");
+    // If the runtime transition fails we roll the persisted flag back so
+    // subsequent reads reflect what's actually running — otherwise
+    // `GET /api/dns/config` claims `enabled: true` while the server never
+    // bound port 53.
+    let transition = if enabled {
+        state.dns_server().start().await
+    } else {
+        state.dns_server().stop().await
+    };
+    if let Err(e) = transition {
+        if let Err(revert_err) = state
+            .dns_service()
+            .toggle(ToggleDnsRequest { enabled: !enabled })
+            .await
+        {
+            tracing::error!(
+                error = %revert_err,
+                "failed to revert DNS config after {op} failure: original={e}",
+                op = if enabled { "start" } else { "stop" },
+                e = e,
+            );
         }
-    } else if let Err(e) = state.dns_server().stop().await {
-        tracing::error!(error = %e, "failed to stop DNS server");
+        return Err(e.into());
     }
 
     Ok(Json(response))

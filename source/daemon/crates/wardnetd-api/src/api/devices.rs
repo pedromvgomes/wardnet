@@ -224,7 +224,11 @@ pub async fn get_device(
     tag = TAG,
     description = "Update mutable device properties: display name, device type, routing \
                    target, and the admin-locked flag. Each field is optional; only \
-                   fields present in the request body are changed. Admin only.",
+                   fields present in the request body are changed. Partial updates \
+                   are best-effort — the mutations are not transactional across \
+                   services, but they are ordered most-likely-to-fail first so a \
+                   rejected routing rule leaves the name and admin-locked flag \
+                   unchanged. Admin only.",
     params(("id" = Uuid, Path, description = "Device ID")),
     request_body = UpdateDeviceRequest,
     responses(
@@ -248,15 +252,24 @@ pub async fn update_device(
         .parse()
         .map_err(|_| AppError::BadRequest("invalid device ID".to_owned()))?;
 
-    // Update name and type if provided.
-    let device = state
-        .discovery_service()
-        .update_device(uuid, body.name.as_deref(), body.device_type)
-        .await?;
+    // Order deliberately runs the mutations most likely to reject first so
+    // a failure happens before any later field is touched: routing-rule
+    // validation (tunnel exists, target shape) is the usual failure mode,
+    // admin_locked is a trivial bool flip, and the name/type update is
+    // idempotent. This is still a best-effort partial write — the three
+    // mutations are NOT transactional across services — but the reorder
+    // removes the surface where "rule rejected" leaves an unrelated name
+    // change persisted. Partial-update semantics are documented in the
+    // `#[utoipa::path(description = …)]` block above.
+    let device_id_str = uuid.to_string();
 
-    let device_id_str = device.id.to_string();
+    if let Some(target) = body.routing_target {
+        state
+            .device_service()
+            .set_rule(&device_id_str, target)
+            .await?;
+    }
 
-    // Update admin_locked if provided.
     if let Some(locked) = body.admin_locked {
         state
             .device_service()
@@ -264,13 +277,10 @@ pub async fn update_device(
             .await?;
     }
 
-    // Update routing rule if provided.
-    if let Some(target) = body.routing_target {
-        state
-            .device_service()
-            .set_rule(&device_id_str, target)
-            .await?;
-    }
+    let device = state
+        .discovery_service()
+        .update_device(uuid, body.name.as_deref(), body.device_type)
+        .await?;
 
     // Fetch current rule for the response.
     let rule = state

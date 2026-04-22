@@ -779,9 +779,11 @@ fn build_state_with_failing_server(dns_svc: impl DnsService + 'static) -> AppSta
 }
 
 #[tokio::test]
-async fn toggle_enable_logs_error_when_server_start_fails() {
-    // The handler should return 200 OK even if the underlying server
-    // fails to start — the error is logged but not surfaced to the caller.
+async fn toggle_enable_returns_error_when_server_start_fails() {
+    // Previously this endpoint swallowed start/stop failures and returned 200,
+    // leaving a split-brain state between the persisted config and the actual
+    // DNS server. The handler now propagates the error; the persisted flag is
+    // rolled back inside the handler's compensation path.
     let state = build_state_with_failing_server(MockDnsService);
     let app = dns_router(state);
 
@@ -799,11 +801,12 @@ async fn toggle_enable_logs_error_when_server_start_fails() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_ne!(resp.status(), StatusCode::OK);
+    assert!(resp.status().is_server_error());
 }
 
 #[tokio::test]
-async fn toggle_disable_logs_error_when_server_stop_fails() {
+async fn toggle_disable_returns_error_when_server_stop_fails() {
     let state = build_state_with_failing_server(MockDnsService);
     let app = dns_router(state);
 
@@ -821,5 +824,6 @@ async fn toggle_disable_logs_error_when_server_stop_fails() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_ne!(resp.status(), StatusCode::OK);
+    assert!(resp.status().is_server_error());
 }

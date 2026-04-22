@@ -112,11 +112,28 @@ pub async fn toggle(
     let enabled = body.enabled;
     let response = state.dhcp_service().toggle(body).await?;
 
-    // Start or stop the DHCP server based on the new config.
-    if enabled {
-        state.dhcp_server().start().await?;
+    // Start or stop the DHCP server based on the new config. If the runtime
+    // transition fails we roll the persisted flag back so subsequent reads
+    // don't advertise a config the server can't satisfy.
+    let transition = if enabled {
+        state.dhcp_server().start().await
     } else {
-        state.dhcp_server().stop().await?;
+        state.dhcp_server().stop().await
+    };
+    if let Err(e) = transition {
+        if let Err(revert_err) = state
+            .dhcp_service()
+            .toggle(ToggleDhcpRequest { enabled: !enabled })
+            .await
+        {
+            tracing::error!(
+                error = %revert_err,
+                "failed to revert DHCP config after {op} failure: original={e}",
+                op = if enabled { "start" } else { "stop" },
+                e = e,
+            );
+        }
+        return Err(e);
     }
 
     Ok(Json(response))

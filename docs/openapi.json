@@ -500,7 +500,7 @@
         "tags": [
           "devices"
         ],
-        "description": "Update mutable device properties: display name, device type, routing target, and the admin-locked flag. Each field is optional; only fields present in the request body are changed. Admin only.",
+        "description": "Update mutable device properties: display name, device type, routing target, and the admin-locked flag. Each field is optional; only fields present in the request body are changed. Partial updates are best-effort — the mutations are not transactional across services, but they are ordered most-likely-to-fail first so a rejected routing rule leaves the name and admin-locked flag unchanged. Admin only.",
         "operationId": "update_device",
         "parameters": [
           {
@@ -7078,7 +7078,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Max entries to return (default 20).",
+            "description": "Max entries to return (default 20, capped at 100).",
             "required": false,
             "schema": {
               "type": "integer",

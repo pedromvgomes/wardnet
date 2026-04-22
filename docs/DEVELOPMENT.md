@@ -202,8 +202,8 @@ The `WARDNET_VERSION` env var seen by the daemon at compile time is derived from
 2. Write release notes in `docs/releases/vX.Y.Z.md` (use a previous release as a template).
 3. Annotated tag: `git tag -a vX.Y.Z -m "..."`.
 4. Push: `git push && git push --tags`.
-5. The [Release workflow](../.github/workflows/release.yml) builds the daemon for every matrix target, signs each tarball with minisign, and publishes a GitHub Release with the `tarball + .sha256 + .minisig` for each target.
-6. The [Deploy Site workflow](../.github/workflows/deploy-site.yml) rebuilds the marketing site on `release: [published]`, regenerating `releases.stable.json` / `releases.beta.json` from the GitHub API. The daemon's auto-update runner (v0.3.0+) reads these manifests.
+5. The [Release workflow](../.github/workflows/release.yml) builds the daemon for every matrix target, signs each tarball with minisign, and publishes a GitHub Release with the `tarball + .sha256 + .minisig` for each target. It also attaches the committed `docs/openapi.json` and its `.sha256` as release assets so external consumers can download the OpenAPI spec for a specific daemon version.
+6. The [Deploy Site workflow](../.github/workflows/deploy-site.yml) rebuilds the marketing site on `release: [published]`, regenerating `public/releases/stable.json`, `public/releases/beta.json`, and `public/releases/openapi-versions.json` from the GitHub API. The daemon's auto-update runner (v0.3.0+) reads the stable/beta manifests; the site's docs page uses `openapi-versions.json` to list distinct published specs (deduped by content hash).
 
 SemVer pre-release tags (`vX.Y.Z-beta.N`, `vX.Y.Z-rc.N`) are automatically flagged as GitHub pre-releases and feed the `beta` channel. Clean `vX.Y.Z` tags feed `stable`.
 

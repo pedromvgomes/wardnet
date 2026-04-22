@@ -32,10 +32,14 @@ pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
 }
 
 /// Query parameters for GET /api/update/history.
+///
+/// `limit` is clamped to `HISTORY_LIMIT_MAX` before being forwarded to the
+/// service so a client can't force `SQLite` to read and serialize an
+/// arbitrarily large slice of `update_history`.
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct HistoryQuery {
-    /// Max entries to return (default 20).
+    /// Max entries to return (default 20, capped at 100).
     #[serde(default = "default_history_limit")]
     pub limit: u32,
 }
@@ -43,6 +47,9 @@ pub struct HistoryQuery {
 const fn default_history_limit() -> u32 {
     20
 }
+
+/// Hard ceiling on `limit` enforced by the handler.
+const HISTORY_LIMIT_MAX: u32 = 100;
 
 #[utoipa::path(
     get,
@@ -190,5 +197,6 @@ pub async fn history(
     _auth: AdminAuth,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<UpdateHistoryResponse>, AppError> {
-    Ok(Json(state.update_service().history(query.limit).await?))
+    let limit = query.limit.clamp(1, HISTORY_LIMIT_MAX);
+    Ok(Json(state.update_service().history(limit).await?))
 }
