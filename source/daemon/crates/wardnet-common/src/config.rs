@@ -214,10 +214,21 @@ impl Default for AuthConfig {
 ///
 /// Optional in the TOML file. When present, `bootstrap_admin` uses these
 /// instead of generating random credentials.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AdminConfig {
     pub username: String,
     pub password: String,
+}
+
+// Redact `password` so a startup-time `?config` trace line can't leak
+// the bootstrap admin password into the log file.
+impl std::fmt::Debug for AdminConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminConfig")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// `WireGuard` tunnel management settings.

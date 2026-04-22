@@ -14,10 +14,21 @@ use crate::vpn_provider::{
 };
 
 /// Login request body.
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
+}
+
+// Redact `password` so a stray `tracing::debug!(?req)` in the auth path
+// can't leak the plaintext into logs.
+impl std::fmt::Debug for LoginRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoginRequest")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Login response body.
@@ -171,10 +182,20 @@ pub struct SetupStatusResponse {
 }
 
 /// Request body for POST /api/setup.
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupRequest {
     pub username: String,
     pub password: String,
+}
+
+// Redact `password` — same rationale as `LoginRequest`.
+impl std::fmt::Debug for SetupRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SetupRequest")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Response for POST /api/setup.
@@ -629,11 +650,22 @@ pub struct UpdateHistoryResponse {
 /// Server-side we enforce a minimum length of
 /// `crate::backup::MIN_PASSPHRASE_LEN`; clients should surface the same
 /// minimum in UI copy so failures happen before the request.
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ExportBackupRequest {
     /// Passphrase chosen by the admin. Never logged, never persisted —
     /// lives only in the memory of the request that produced the bundle.
     pub passphrase: String,
+}
+
+// Manual `Debug` so that a future `tracing::debug!(?req)` anywhere in
+// the export path renders `passphrase: "[REDACTED]"` instead of the
+// plaintext. The derived impl would leak it unconditionally.
+impl std::fmt::Debug for ExportBackupRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExportBackupRequest")
+            .field("passphrase", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Response for `POST /api/backup/import/preview`.

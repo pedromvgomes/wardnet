@@ -144,6 +144,22 @@ impl DatabaseDumper for SqliteDumper {
             )
         })?;
 
+        // Tighten perms immediately — the file holds admin password
+        // hashes, session tokens, and API keys. Default umask would
+        // leave it 0644 (world-readable) until the rename completes.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o600))
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "failed to tighten permissions on restore staging {}: {e}",
+                        staging.display()
+                    )
+                })?;
+        }
+
         tokio::fs::rename(&staging, &self.database_path)
             .await
             .map_err(|e| {

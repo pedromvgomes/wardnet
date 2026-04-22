@@ -31,7 +31,7 @@ pub struct ProviderInfo {
 }
 
 /// Credentials submitted by the admin for provider operations.
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProviderCredentials {
     /// Username/password pair (service credentials).
@@ -46,6 +46,27 @@ pub enum ProviderCredentials {
         /// The access token value.
         token: String,
     },
+}
+
+// Redact secret fields so `tracing::debug!(?req)` anywhere in the
+// provider flow can't leak service passwords or API tokens. Wrapping
+// DTOs (ValidateCredentialsRequest, ListServersRequest,
+// SetupProviderRequest) keep their derived `Debug` and pick up this
+// redaction transparently via the field's own impl.
+impl std::fmt::Debug for ProviderCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Credentials { username, .. } => f
+                .debug_struct("Credentials")
+                .field("username", username)
+                .field("password", &"[REDACTED]")
+                .finish(),
+            Self::Token { .. } => f
+                .debug_struct("Token")
+                .field("token", &"[REDACTED]")
+                .finish(),
+        }
+    }
 }
 
 /// Filters for server listing.

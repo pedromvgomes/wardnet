@@ -33,7 +33,7 @@ use wardnetd_data::secret_store::SecretEntry;
 /// Kept as a plain struct (no lifetimes, no `impl Trait`) so the service
 /// layer can build one and hand it off to a background task without
 /// plumbing references through async boundaries.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BundleContents {
     /// Manifest that will land at `manifest.json` inside the tar.
     pub manifest: BundleManifest,
@@ -45,6 +45,27 @@ pub struct BundleContents {
     /// backup. For `FileSecretStore` this is every entry under the
     /// store root; for external providers it may be empty.
     pub secrets: Vec<SecretEntry>,
+}
+
+// Manual `Debug` — the derived impl would dump the full database
+// snapshot (admin hashes, session tokens, API keys) and every
+// WireGuard private key into any log line that formats this struct.
+// The counts let operators see shape without leaking content.
+impl std::fmt::Debug for BundleContents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BundleContents")
+            .field("manifest", &self.manifest)
+            .field(
+                "database_bytes",
+                &format_args!("[{} bytes]", self.database_bytes.len()),
+            )
+            .field(
+                "config_bytes",
+                &format_args!("[{} bytes]", self.config_bytes.len()),
+            )
+            .field("secrets", &format_args!("[{} entries]", self.secrets.len()))
+            .finish()
+    }
 }
 
 /// Encrypted-bundle codec.

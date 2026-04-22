@@ -44,7 +44,7 @@ use wardnet_common::config::SecretStoreConfig;
 /// emits every `(path, bytes)` pair; external providers (`HashiCorp`
 /// Vault, `OnePassword`, AWS Secrets Manager) emit whatever — if
 /// anything — they need to survive a restore.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SecretEntry {
     /// Path inside the store, e.g. `wireguard/<uuid>.key`.
     pub path: String,
@@ -52,6 +52,18 @@ pub struct SecretEntry {
     /// encode a reference in the `path` or a convention their own
     /// `restore_from_backup` understands.
     pub value: Vec<u8>,
+}
+
+// Manual `Debug` so callers that format a `SecretEntry` via
+// `?entry` — including any future service-layer or test-layer use —
+// get a byte-count summary instead of the raw key material.
+impl std::fmt::Debug for SecretEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretEntry")
+            .field("path", &self.path)
+            .field("value", &format_args!("[{} bytes]", self.value.len()))
+            .finish()
+    }
 }
 
 /// A generic secret store keyed by forward-slash-separated paths.
