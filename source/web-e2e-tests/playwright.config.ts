@@ -7,7 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN_UI_URL = "http://127.0.0.1:7411";
 const SITE_URL = "http://localhost:7413";
 
-// CI supplies the path to a pre-built binary; local dev falls back to `cargo run`.
+// CI supplies the path to a pre-built debug binary; local dev falls back to
+// `cargo run` which compiles on demand.
 const mockBin = process.env.WARDNETD_MOCK_BIN;
 const mockCommand = mockBin
   ? `${mockBin} --no-seed --no-events`
@@ -35,6 +36,14 @@ export default defineConfig({
         baseURL: ADMIN_UI_URL,
         storageState: "./admin-ui/.auth/admin.json",
       },
+      // Only the mock server is needed — do not start the site dev server.
+      webServer: {
+        command: mockCommand,
+        cwd: mockCwd,
+        url: `${ADMIN_UI_URL}/api/info`,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
     },
 
     // ----- Site -----
@@ -46,22 +55,14 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: SITE_URL,
       },
-    },
-  ],
-
-  webServer: [
-    {
-      command: mockCommand,
-      cwd: mockCwd,
-      url: `${ADMIN_UI_URL}/api/info`,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-    {
-      command: "yarn dev",
-      cwd: path.resolve(__dirname, "../site"),
-      url: SITE_URL,
-      reuseExistingServer: !process.env.CI,
+      // Only the site dev server is needed — do not start wardnetd-mock.
+      webServer: {
+        command: "yarn dev",
+        cwd: path.resolve(__dirname, "../site"),
+        url: SITE_URL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+      },
     },
   ],
 });

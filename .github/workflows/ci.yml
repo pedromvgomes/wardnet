@@ -193,13 +193,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      # Uses the same Yarn 4 setup as all other JS packages. The e2e package
-      # uses `yarn install` (not --immutable) until a yarn.lock is committed.
       - uses: ./.github/actions/setup-node-yarn
         with:
           cache-dependency-path: source/web-e2e-tests/yarn.lock
 
       - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: e2e-debug
 
       - name: Download web-ui dist
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -217,12 +217,12 @@ jobs:
         run: cd source/site && yarn install --immutable
 
       - name: Build wardnetd-mock
-        run: cd source/daemon && cargo build -p wardnetd-mock --release
+        run: cd source/daemon && cargo build -p wardnetd-mock
 
       - name: Run E2E tests (admin-ui)
         run: |
           cd source/web-e2e-tests && \
-            WARDNETD_MOCK_BIN=${{ github.workspace }}/source/daemon/target/release/wardnetd-mock \
+            WARDNETD_MOCK_BIN=${{ github.workspace }}/source/daemon/target/debug/wardnetd-mock \
             yarn test:admin-ui
 
       - name: Run E2E tests (site)
