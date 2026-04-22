@@ -73,6 +73,763 @@
         ]
       }
     },
+    "/api/backup/export": {
+      "post": {
+        "tags": [
+          "backup"
+        ],
+        "description": "Produce an encrypted bundle and stream it back as `application/octet-stream`. The passphrase is required again on restore; the daemon cannot recover a forgotten one.",
+        "operationId": "export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportBackupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Encrypted .wardnet.age bundle",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/backup/import/apply": {
+      "post": {
+        "tags": [
+          "backup"
+        ],
+        "description": "Commit a previously-previewed import. Renames live files to `.bak-<timestamp>` siblings, writes the bundle contents into place, and sets `backup_restart_pending` in `system_config`. The daemon requires a restart afterwards for the live database pool to pick up the new file.",
+        "operationId": "apply_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Restore applied, restart required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/backup/import/preview": {
+      "post": {
+        "tags": [
+          "backup"
+        ],
+        "description": "Accept a multipart upload with `bundle` (binary file) + `passphrase` (text), decrypt it server-side, validate compatibility against the running daemon, and return a short-lived preview token the caller can pass to `/api/backup/import/apply`. Nothing on disk changes yet.",
+        "operationId": "preview_import",
+        "requestBody": {
+          "description": "Bundle file (`bundle`) and passphrase (`passphrase`) as multipart fields",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/RestorePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Preview token + bundle manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/backup/snapshots": {
+      "get": {
+        "tags": [
+          "backup"
+        ],
+        "description": "Enumerate `.bak-<timestamp>` siblings retained from prior restores. Snapshots are trimmed by a background runner after 24 hours.",
+        "operationId": "list_snapshots",
+        "responses": {
+          "200": {
+            "description": "Retained .bak-<ts> snapshots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSnapshotsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/backup/status": {
+      "get": {
+        "tags": [
+          "backup"
+        ],
+        "description": "Return the current backup subsystem phase (idle, exporting, importing with a nested phase, or failed with a reason).",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "Current backup subsystem status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/devices": {
       "get": {
         "tags": [
@@ -6191,6 +6948,125 @@
         ]
       }
     },
+    "/api/system/restart": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Ask the daemon to exit so the supervisor restarts it.",
+        "description": "Ask the daemon to exit cleanly so the supervisor (systemd on a Pi install) restarts it. The response returns before the process exits; the daemon will be unreachable for a few seconds while it comes back up.",
+        "operationId": "restart",
+        "responses": {
+          "204": {
+            "description": "Restart scheduled"
+          },
+          "401": {
+            "description": "Unauthenticated — session cookie or API key missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — caller is not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Standard API error response.",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Request ID for correlation with server logs."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/system/status": {
       "get": {
         "tags": [
@@ -7704,6 +8580,124 @@
           }
         }
       },
+      "ApplyImportRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/backup/import/apply`.\n\nConsumes the `preview_token` returned by `/preview`, ensuring the\napply step always has a prior preview (no silent blind restores).",
+        "required": [
+          "preview_token"
+        ],
+        "properties": {
+          "preview_token": {
+            "type": "string"
+          }
+        }
+      },
+      "ApplyImportResponse": {
+        "type": "object",
+        "description": "Response for `POST /api/backup/import/apply`.\n\nReturned once the swap completes. The daemon restarts subsystems\n(DHCP/DNS/update runners) after the swap; subsequent API calls see\nthe restored state.",
+        "required": [
+          "manifest",
+          "snapshots"
+        ],
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/BundleManifest",
+            "description": "Final manifest for the applied bundle — identical to the one\nsurfaced in the preview but repeated here so the UI can confirm\nwithout re-fetching."
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalSnapshot"
+            },
+            "description": "`.bak-<timestamp>` snapshots of the files that were replaced.\nRetained by the background cleanup task for 24 h."
+          }
+        }
+      },
+      "BackupStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Nothing happening. The subsystem is ready to export or import.",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "idle"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Bundle is being packed and encrypted for download.",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "exporting"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "An import is in progress — `phase` describes where.",
+            "required": [
+              "phase",
+              "state"
+            ],
+            "properties": {
+              "phase": {
+                "$ref": "#/components/schemas/RestorePhase"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "importing"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The last import failed; the error is retained until the next operation.",
+            "required": [
+              "reason",
+              "state"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Coarse subsystem status surfaced by `GET /api/backup/status` and the web UI."
+      },
+      "BackupStatusResponse": {
+        "type": "object",
+        "description": "Response for `GET /api/backup/status`.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/BackupStatus"
+          }
+        }
+      },
       "Blocklist": {
         "type": "object",
         "description": "A URL-sourced domain blocklist for ad blocking.",
@@ -7769,6 +8763,50 @@
           },
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "BundleManifest": {
+        "type": "object",
+        "description": "Metadata describing a bundle. Serialised as `manifest.json` inside the tar.\n\nThe manifest is the first entry extracted during validation so we can\nreject incompatible bundles before touching any daemon state.",
+        "required": [
+          "wardnet_version",
+          "schema_version",
+          "created_at",
+          "host_id",
+          "bundle_format_version",
+          "key_count"
+        ],
+        "properties": {
+          "bundle_format_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Bundle layout version. See `CURRENT_BUNDLE_FORMAT_VERSION`.",
+            "minimum": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp the bundle was created."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "Opaque identifier for the source host (hostname or a stable system id).\nSurfaced in the restore preview so operators can confirm they're not\nrestoring a bundle from the wrong machine."
+          },
+          "key_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of `WireGuard` key files included in the bundle. Surfaced in the\npreview UI so the operator knows exactly what will be overwritten.",
+            "minimum": 0
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Highest applied sqlx migration version at export time."
+          },
+          "wardnet_version": {
+            "type": "string",
+            "description": "Daemon version (from `WARDNET_VERSION`) that produced the bundle, e.g.\n`0.2.0` or `0.2.1-dev.7+gabc1234`. Informational — not used for compat."
           }
         }
       },
@@ -8604,6 +9642,19 @@
           }
         }
       },
+      "ExportBackupRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/backup/export`.\n\nThe passphrase is used to derive the age encryption key via scrypt.\nServer-side we enforce a minimum length of\n`crate::backup::MIN_PASSPHRASE_LEN`; clients should surface the same\nminimum in UI copy so failures happen before the request.",
+        "required": [
+          "passphrase"
+        ],
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "description": "Passphrase chosen by the admin. Never logged, never persisted —\nlives only in the memory of the request that produced the bundle."
+          }
+        }
+      },
       "InfoResponse": {
         "type": "object",
         "description": "Response from the public info endpoint.\n\nReturns basic server information without requiring authentication.\nUsed by the web UI's connection status widget.",
@@ -9055,6 +10106,21 @@
           }
         }
       },
+      "ListSnapshotsResponse": {
+        "type": "object",
+        "description": "Response for `GET /api/backup/snapshots`.",
+        "required": [
+          "snapshots"
+        ],
+        "properties": {
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalSnapshot"
+            }
+          }
+        }
+      },
       "ListTunnelsResponse": {
         "type": "object",
         "description": "Response for GET /api/tunnels.",
@@ -9067,6 +10133,37 @@
             "items": {
               "$ref": "#/components/schemas/Tunnel"
             }
+          }
+        }
+      },
+      "LocalSnapshot": {
+        "type": "object",
+        "description": "Summary of a local `.bak-*` directory left behind by a previous import.\n\nRetained for 24h by the background cleanup task so operators can manually\nrecover from a bad restore. Surfaced by `GET /api/backup/snapshots`.",
+        "required": [
+          "path",
+          "kind",
+          "created_at",
+          "size_bytes"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the snapshot was created."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SnapshotKind",
+            "description": "Which file the snapshot was taken of (`\"database\"`, `\"config\"`,\n`\"keys\"`). Lets the UI group snapshots produced by the same import."
+          },
+          "path": {
+            "type": "string",
+            "description": "Fully-qualified path on disk, e.g.\n`/var/lib/wardnet/wardnet.db.bak-20260421T143022Z`."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total size on disk in bytes (directories are summed recursively).",
+            "minimum": 0
           }
         }
       },
@@ -9225,6 +10322,149 @@
             "items": {
               "$ref": "#/components/schemas/ApiErrorEntry"
             }
+          }
+        }
+      },
+      "RestorePhase": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "No restore in progress.",
+            "enum": [
+              "idle"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Decrypting the bundle and parsing the manifest.",
+            "enum": [
+              "validating"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Stopping DHCP/DNS/update runners so the DB swap is safe.",
+            "enum": [
+              "stopping_runners"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Renaming current `wardnet.db` / `wardnet.toml` / `keys/` to\n`.bak-<timestamp>` siblings.",
+            "enum": [
+              "backing_up"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Extracting bundle contents into place.",
+            "enum": [
+              "extracting"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Running `sqlx migrate` against the restored database so a\nlower-schema-version bundle lands cleanly on a newer daemon.",
+            "enum": [
+              "migrating"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Restarting runners with the new state.",
+            "enum": [
+              "restarting_runners"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Restore completed successfully.",
+            "enum": [
+              "applied"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Something went wrong — the `.bak-*` siblings are still on disk for\nmanual recovery. `reason` holds the operator-facing error message.",
+            "required": [
+              "failed"
+            ],
+            "properties": {
+              "failed": {
+                "type": "object",
+                "description": "Something went wrong — the `.bak-*` siblings are still on disk for\nmanual recovery. `reason` holds the operator-facing error message.",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "Phase of an in-flight restore. Emitted as progress events so the UI can\nshow a spinner with meaningful status text.\n\nThe restore pipeline is strictly sequential — no phase is ever skipped on\nthe happy path, and a failure preserves the phase it occurred in so the\noperator can tell *where* the restore broke."
+      },
+      "RestorePreviewRequest": {
+        "type": "object",
+        "description": "Schema-only stand-in so the `OpenAPI` spec can describe the\nmultipart fields `preview_import` accepts. The handler itself\npulls fields out of [`axum::extract::Multipart`] directly — this\ntype is never materialised at runtime.",
+        "required": [
+          "bundle",
+          "passphrase"
+        ],
+        "properties": {
+          "bundle": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "binary",
+              "minimum": 0
+            },
+            "description": "The encrypted `.wardnet.age` bundle bytes."
+          },
+          "passphrase": {
+            "type": "string",
+            "description": "Passphrase that was used to encrypt the bundle on export."
+          }
+        }
+      },
+      "RestorePreviewResponse": {
+        "type": "object",
+        "description": "Response for `POST /api/backup/import/preview`.\n\nReturned before any daemon state is touched. The UI uses this to show\nthe admin what will change — which database, config, and key files get\nswapped, and which bundle they came from — so the actual apply step\nis a conscious confirmation.",
+        "required": [
+          "manifest",
+          "compatible",
+          "files_to_replace",
+          "preview_token"
+        ],
+        "properties": {
+          "compatible": {
+            "type": "boolean",
+            "description": "True when the bundle's `bundle_format_version` and\n`schema_version` are both compatible with the running daemon. A\n`false` here means `apply_import` will refuse; the UI should\nsurface `incompatibility_reason` and hide the confirm button."
+          },
+          "files_to_replace": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files the apply step will rename to `.bak-<timestamp>` siblings\nand then overwrite. Surfaced verbatim in the UI so operators\nunderstand the blast radius before confirming."
+          },
+          "incompatibility_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable reason the bundle is incompatible, when\n`compatible` is `false`. `None` on the happy path."
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/BundleManifest",
+            "description": "Bundle manifest, fully decrypted and validated."
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "Opaque token the caller passes back to `apply_import` to prove\nthey just saw this preview. Scoped to a single bundle + session."
           }
         }
       },
@@ -9499,6 +10739,15 @@
             "type": "boolean"
           }
         }
+      },
+      "SnapshotKind": {
+        "type": "string",
+        "description": "What a [`LocalSnapshot`] is a snapshot of.",
+        "enum": [
+          "database",
+          "config",
+          "keys"
+        ]
       },
       "SystemStatusResponse": {
         "type": "object",
