@@ -204,6 +204,18 @@ async fn null_secret_store_backup_contents_is_empty() {
     assert!(entries.is_empty());
 }
 
+#[test]
+fn secret_entry_debug_shows_byte_count_not_contents() {
+    let entry = SecretEntry {
+        path: "wireguard/sekrit.key".to_owned(),
+        value: b"raw-private-key-bytes-here".to_vec(),
+    };
+    let rendered = format!("{entry:?}");
+    assert!(rendered.contains("wireguard/sekrit.key"));
+    assert!(rendered.contains("26 bytes"));
+    assert!(!rendered.contains("raw-private-key-bytes-here"));
+}
+
 #[tokio::test]
 async fn null_secret_store_restore_from_backup_rejects_non_empty_bundle() {
     let store = NullSecretStore;

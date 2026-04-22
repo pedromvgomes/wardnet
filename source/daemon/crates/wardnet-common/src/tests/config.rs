@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::config::{ApplicationConfiguration, LogFormat, LogRotation, SecretStoreConfig};
+use crate::config::{
+    AdminConfig, ApplicationConfiguration, LogFormat, LogRotation, SecretStoreConfig,
+};
 
 #[test]
 fn defaults_when_file_missing() {
@@ -132,4 +134,16 @@ fn to_filter_string_with_overrides() {
     assert!(filter.contains("wardnetd=debug"));
     assert!(filter.contains("wardnet_common=debug"));
     assert!(filter.contains("sqlx=trace"));
+}
+
+#[test]
+fn admin_config_debug_redacts_password() {
+    let cfg = AdminConfig {
+        username: "bootstrap-admin".to_owned(),
+        password: "bootstrap-hunter2".to_owned(),
+    };
+    let rendered = format!("{cfg:?}");
+    assert!(rendered.contains("bootstrap-admin"));
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("bootstrap-hunter2"));
 }

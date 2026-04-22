@@ -1,4 +1,5 @@
 mod auth;
+mod backup;
 mod devices;
 mod dhcp;
 mod dns;

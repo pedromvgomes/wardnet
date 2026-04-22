@@ -151,3 +151,25 @@ fn auth_method_serializes_snake_case() {
     assert_eq!(serde_json::to_string(&cred).unwrap(), r#""credentials""#);
     assert_eq!(serde_json::to_string(&token).unwrap(), r#""token""#);
 }
+
+#[test]
+fn credentials_debug_redacts_password_but_shows_username() {
+    let creds = ProviderCredentials::Credentials {
+        username: "alice@example.com".to_owned(),
+        password: "plaintext-pwd".to_owned(),
+    };
+    let rendered = format!("{creds:?}");
+    assert!(rendered.contains("alice@example.com"));
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("plaintext-pwd"));
+}
+
+#[test]
+fn token_debug_redacts_the_token_value() {
+    let creds = ProviderCredentials::Token {
+        token: "sk-abc-def-123".to_owned(),
+    };
+    let rendered = format!("{creds:?}");
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("sk-abc-def-123"));
+}
