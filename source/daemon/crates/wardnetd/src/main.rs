@@ -38,10 +38,10 @@ use wardnetd_services::dhcp::runner::DhcpRunner;
 use wardnetd_services::dns::blocklist_downloader::{BlocklistFetcher, HttpBlocklistFetcher};
 use wardnetd_services::dns::filter::DnsFilter;
 use wardnetd_services::dns::runner::DnsRunner;
-use wardnetd_services::keys::FileKeyStore;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
+use wardnetd_services::secret_store::build_secret_store;
 use wardnetd_services::update::{
     EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier, UpdateRunner,
 };
@@ -105,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
     // propagated across `.await` points in the tokio multi-threaded runtime.
     // The `Full` (console) formatter prints span fields on every line, and the
     // JSON formatter includes them via `with_current_span` / `with_span_list`.
-    let result = run(config, log_service)
+    let result = run(config, cli.config.clone(), log_service)
         .instrument(tracing::info_span!(
             "wardnetd",
             version = env!("WARDNET_VERSION")
@@ -137,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
 #[allow(clippy::too_many_lines)]
 async fn run(
     config: ApplicationConfiguration,
+    config_path: PathBuf,
     log_service: Arc<dyn LogService>,
 ) -> anyhow::Result<()> {
     let started_at = Instant::now();
@@ -183,6 +184,15 @@ async fn run(
         )),
     };
 
+    let host_id = sysinfo::System::host_name().unwrap_or_else(|| "wardnet".to_owned());
+
+    // One shutdown token shared by three consumers:
+    //   - `shutdown_signal` below (waits on it alongside SIGINT/SIGTERM)
+    //   - `SystemService::request_restart` (cancels it to trigger restart)
+    //   - cleanup logic after `axum::serve` returns
+    // Cancelling it from any source drives the same graceful-shutdown path.
+    let shutdown_token = tokio_util::sync::CancellationToken::new();
+
     let backends = Backends {
         tunnel_interface: Arc::new(WireGuardTunnelInterface),
         policy_router: Arc::new(
@@ -192,9 +202,12 @@ async fn run(
         firewall: Arc::new(NftablesFirewallManager::new(executor.clone())),
         packet_capture: packet_capture.clone(),
         hostname_resolver: Arc::new(SystemHostnameResolver),
-        key_store: Arc::new(FileKeyStore::new(config.tunnel.keys_dir.clone())),
+        secret_store: build_secret_store(config.secret_store.as_ref()),
         blocklist_fetcher: blocklist_fetcher.clone(),
         update: update_backends,
+        config_path: config_path.clone(),
+        host_id,
+        shutdown_token: shutdown_token.clone(),
     };
 
     // Wire services (initialises repo factory, bootstraps admin, creates all services).
@@ -351,8 +364,19 @@ async fn run(
         &root_span,
     );
 
+    // Backup cleanup runner — trims `.bak-<ts>` siblings older than
+    // 24 h. Hourly sweep, same root span as the other background tasks
+    // so every log line carries the daemon version.
+    let backup_cleanup_runner = wardnetd_services::backup::BackupCleanupRunner::start(
+        services.backup.clone(),
+        Duration::from_secs(60 * 60),
+        wardnetd_services::backup::DEFAULT_SNAPSHOT_RETENTION,
+        &root_span,
+    );
+
     let state = AppState::new(
         services.auth.clone(),
+        services.backup.clone(),
         services.device.clone(),
         services.dhcp.clone(),
         services.dns.clone(),
@@ -387,7 +411,7 @@ async fn run(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(shutdown_signal(shutdown_token.clone()))
     .into_future()
     .instrument(api_span)
     .await?;
@@ -400,6 +424,7 @@ async fn run(
     dhcp_runner.shutdown().await;
     dns_runner.shutdown().await;
     update_runner.shutdown().await;
+    backup_cleanup_runner.shutdown().await;
     if let Some(detector) = device_detector {
         detector.shutdown().await;
     }
@@ -641,7 +666,7 @@ fn init_tracing(
     }
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(restart_token: tokio_util::sync::CancellationToken) {
     let ctrl_c = tokio::signal::ctrl_c();
 
     #[cfg(unix)]
@@ -651,12 +676,16 @@ async fn shutdown_signal() {
         tokio::select! {
             _ = ctrl_c => {},
             _ = sigterm.recv() => {},
+            () = restart_token.cancelled() => {},
         }
     }
 
     #[cfg(not(unix))]
     {
-        ctrl_c.await.ok();
+        tokio::select! {
+            _ = ctrl_c => {},
+            () = restart_token.cancelled() => {},
+        }
     }
 
     tracing::info!("shutdown signal received");

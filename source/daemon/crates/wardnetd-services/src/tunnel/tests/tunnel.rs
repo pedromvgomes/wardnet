@@ -17,8 +17,8 @@ use crate::auth_context;
 use crate::error::AppError;
 use crate::event::EventPublisher;
 use crate::tunnel::interface::{CreateTunnelParams, TunnelInterface, TunnelStats};
+use crate::tunnel::key_store::KeyStore;
 use crate::{TunnelService, TunnelServiceImpl};
-use wardnetd_data::keys::KeyStore;
 use wardnetd_data::repository::tunnel::TunnelRow;
 use wardnetd_data::repository::{DeviceRepository, TunnelRepository};
 
@@ -468,7 +468,7 @@ fn build_harness() -> TestHarness {
     let keys = Arc::new(MockKeyStore::new());
     let events = Arc::new(MockEventPublisher::new());
 
-    let svc = TunnelServiceImpl::new(
+    let svc = TunnelServiceImpl::with_key_store(
         repo,
         device_repo,
         tunnel_iface.clone(),
@@ -490,7 +490,7 @@ fn build_harness_with_device_repo(device_repo: Arc<dyn DeviceRepository>) -> Tes
     let keys = Arc::new(MockKeyStore::new());
     let events = Arc::new(MockEventPublisher::new());
 
-    let svc = TunnelServiceImpl::new(
+    let svc = TunnelServiceImpl::with_key_store(
         repo,
         device_repo,
         tunnel_iface.clone(),

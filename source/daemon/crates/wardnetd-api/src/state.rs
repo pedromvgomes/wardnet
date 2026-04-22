@@ -4,8 +4,9 @@ use wardnetd_services::dhcp::server::DhcpServer;
 use wardnetd_services::dns::server::DnsServer;
 use wardnetd_services::event::EventPublisher;
 use wardnetd_services::{
-    AuthService, DeviceDiscoveryService, DeviceService, DhcpService, DnsService, JobService,
-    LogService, RoutingService, SystemService, TunnelService, UpdateService, VpnProviderService,
+    AuthService, BackupService, DeviceDiscoveryService, DeviceService, DhcpService, DnsService,
+    JobService, LogService, RoutingService, SystemService, TunnelService, UpdateService,
+    VpnProviderService,
 };
 
 /// Shared application state, cheaply cloneable via `Arc`.
@@ -19,6 +20,7 @@ pub struct AppState {
 
 struct Inner {
     auth_service: Arc<dyn AuthService>,
+    backup_service: Arc<dyn BackupService>,
     device_service: Arc<dyn DeviceService>,
     dhcp_service: Arc<dyn DhcpService>,
     dns_service: Arc<dyn DnsService>,
@@ -40,6 +42,7 @@ impl AppState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_service: Arc<dyn AuthService>,
+        backup_service: Arc<dyn BackupService>,
         device_service: Arc<dyn DeviceService>,
         dhcp_service: Arc<dyn DhcpService>,
         dns_service: Arc<dyn DnsService>,
@@ -58,6 +61,7 @@ impl AppState {
         Self {
             inner: Arc::new(Inner {
                 auth_service,
+                backup_service,
                 device_service,
                 dhcp_service,
                 dns_service,
@@ -74,6 +78,12 @@ impl AppState {
                 job_service,
             }),
         }
+    }
+
+    /// Access the backup service.
+    #[must_use]
+    pub fn backup_service(&self) -> &dyn BackupService {
+        self.inner.backup_service.as_ref()
     }
 
     #[must_use]

@@ -13,7 +13,7 @@ declare function clearTimeout(id: ReturnType<typeof setTimeout>): void;
 interface RequestInit {
   method?: string;
   headers?: Record<string, string>;
-  body?: string | null;
+  body?: string | Blob | FormData | null;
   credentials?: "include" | "omit" | "same-origin";
   signal?: AbortSignal;
 }
@@ -25,6 +25,30 @@ interface Response {
   headers: Headers;
   json(): Promise<unknown>;
   text(): Promise<string>;
+  blob(): Promise<Blob>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/**
+ * Binary file object — available natively in browsers and Node 18+.
+ * The SDK surfaces it as the return type of `BackupService.export`
+ * and as the input to `BackupService.previewImport`.
+ */
+declare class Blob {
+  readonly size: number;
+  readonly type: string;
+  constructor(parts?: Array<ArrayBuffer | Uint8Array | Blob | string>, options?: { type?: string });
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/**
+ * Multipart form body — available natively in browsers and Node 18+.
+ * Required by `BackupService.previewImport` to submit the bundle and
+ * passphrase as a `multipart/form-data` request.
+ */
+declare class FormData {
+  constructor();
+  append(name: string, value: string | Blob, filename?: string): void;
 }
 
 interface Headers {

@@ -22,6 +22,17 @@ pub struct ApplicationConfiguration {
     pub vpn_providers: VpnProvidersConfig,
     pub pyroscope: PyroscopeConfig,
     pub update: UpdateConfig,
+    /// Secret-store configuration. **Optional.**
+    ///
+    /// When absent, no local secret storage is available: tunnels that
+    /// require a `WireGuard` private key and backup features that require
+    /// stored credentials will refuse to operate. Device detection, DHCP,
+    /// DNS, and read-only admin endpoints still work.
+    ///
+    /// Future external providers (`HashiCorp` Vault, Azure Key Vault, AWS
+    /// Secrets Manager) will plug in as additional variants of
+    /// [`SecretStoreConfig`] behind the same `SecretStore` trait.
+    pub secret_store: Option<SecretStoreConfig>,
 }
 
 impl ApplicationConfiguration {
@@ -203,17 +214,31 @@ impl Default for AuthConfig {
 ///
 /// Optional in the TOML file. When present, `bootstrap_admin` uses these
 /// instead of generating random credentials.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AdminConfig {
     pub username: String,
     pub password: String,
 }
 
+// Redact `password` so a startup-time `?config` trace line can't leak
+// the bootstrap admin password into the log file.
+impl std::fmt::Debug for AdminConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminConfig")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// `WireGuard` tunnel management settings.
+///
+/// Note: private-key storage is not configured here — it lives under the
+/// top-level [`SecretStoreConfig`]. Tunnel creation refuses to operate
+/// when no secret store is configured.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TunnelConfig {
-    pub keys_dir: PathBuf,
     pub idle_timeout_secs: u64,
     pub health_check_interval_secs: u64,
     pub stats_interval_secs: u64,
@@ -222,12 +247,35 @@ pub struct TunnelConfig {
 impl Default for TunnelConfig {
     fn default() -> Self {
         Self {
-            keys_dir: PathBuf::from("/etc/wardnet/keys"),
             idle_timeout_secs: 600,
             health_check_interval_secs: 10,
             stats_interval_secs: 5,
         }
     }
+}
+
+/// Secret-store provider configuration.
+///
+/// The `provider` discriminator in TOML selects the storage backend;
+/// each variant carries the fields specific to that backend. Today only
+/// `file_system` is shipped — future variants (`hashicorp_vault`,
+/// `azure_key_vault`, `aws_secrets_manager`, etc.) plug in behind the
+/// same `SecretStore` trait without changing the wire format.
+///
+/// ```toml
+/// [secret_store]
+/// provider = "file_system"
+/// path = "/var/lib/wardnet/secrets"
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "provider", rename_all = "snake_case")]
+pub enum SecretStoreConfig {
+    /// Local-filesystem-backed secret store. Each secret is written as a
+    /// 0600-mode file rooted at `path`, namespaced by subdirectory
+    /// (`wireguard/`, `backup/`, `destinations/`, etc.). The path must be
+    /// writable by the `wardnet` user and should live on persistent
+    /// (non-tmpfs) storage.
+    FileSystem { path: PathBuf },
 }
 
 /// Device detection settings.

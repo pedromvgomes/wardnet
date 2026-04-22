@@ -45,7 +45,7 @@ COV_FMT    ?= --summary-only
         coverage-daemon coverage-daemon-native coverage-daemon-container \
         openapi check-openapi \
         fmt clippy test \
-        deploy run-pi run-dev system-test system-test-setup system-test-teardown \
+        deploy run-pi run-dev run-dev-daemon run-dev-web system-test system-test-setup system-test-teardown \
         sync-version check-version \
         clean help
 
@@ -277,7 +277,11 @@ LOCAL_DIR := $(CURDIR)/.wardnet-local
 # /api to the mock. Ctrl+C stops the dev server and tears down the mock
 # via the EXIT trap. Database is in-memory by default (ephemeral).
 # Use RESUME=true to persist the database at .wardnet-local/wardnet.db.
-run-dev:
+# Run just the mock daemon (`wardnetd-mock`) in the foreground on :7411.
+# Respects `RESUME=true` for on-disk DB persistence at
+# `.wardnet-local/wardnet.db`. Use this when you only need the API (e.g.
+# exercising `/api/docs`, curling endpoints) without the Vite server.
+run-dev-daemon:
 	@mkdir -p $(LOCAL_DIR)
 	@if [ "$(RESUME)" = "true" ]; then \
 		DB_ARG="--database $(LOCAL_DIR)/wardnet.db --no-seed"; \
@@ -287,15 +291,31 @@ run-dev:
 		DB_ARG=""; \
 		echo "Using in-memory DB (use RESUME=true for on-disk persistence)"; \
 	fi; \
-	echo "=== Starting wardnetd-mock + web UI dev server ==="; \
 	echo "Mock API : http://127.0.0.1:7411"; \
-	echo "Web UI   : http://127.0.0.1:7412  (proxies /api to mock)"; \
 	echo ""; \
-	set -e; \
-	cargo run --manifest-path=$(DAEMON_DIR)/Cargo.toml --bin wardnetd-mock -- --verbose $$DB_ARG & \
+	cargo run --manifest-path=$(DAEMON_DIR)/Cargo.toml --bin wardnetd-mock -- --verbose $$DB_ARG
+
+# Run just the Vite dev server on :7412, proxying `/api` to :7411. Use
+# this when you already have a mock daemon running in another terminal.
+run-dev-web:
+	@echo "Web UI   : http://127.0.0.1:7412  (proxies /api to mock on :7411)"
+	@echo ""
+	@cd $(WEBUI_DIR) && yarn dev
+
+# Run mock daemon + Vite dev server together. The daemon is spawned in
+# the background via a recursive `$(MAKE) run-dev-daemon` call; the web
+# dev server runs in the foreground. Ctrl+C stops Vite and tears down
+# the mock via the EXIT trap.
+#
+# Database is in-memory by default (ephemeral); `RESUME=true` to
+# persist at `.wardnet-local/wardnet.db`.
+run-dev:
+	@echo "=== Starting wardnetd-mock + web UI dev server ==="
+	@set -e; \
+	$(MAKE) run-dev-daemon & \
 	DAEMON_PID=$$!; \
 	trap "kill $$DAEMON_PID 2>/dev/null; wait $$DAEMON_PID 2>/dev/null; true" EXIT INT TERM; \
-	cd $(WEBUI_DIR) && yarn dev
+	$(MAKE) run-dev-web
 
 run-pi: build-pi
 	@test -n "$(PI_HOST)" || { echo "Error: PI_HOST is required"; exit 1; }
@@ -308,10 +328,10 @@ run-pi: build-pi
 		fi; \
 		OTEL_SECTION=$$(printf '\n[otel]\nenabled = true\nendpoint = "http://%s:4317"\n\n[otel.metrics]\nenabled = true\n\n[pyroscope]\nenabled = true\nendpoint = "http://%s:4040"\n' "$$OTEL_EP" "$$OTEL_EP"); \
 	fi && \
-	printf '[database]\npath = "%s/wardnet-dev/wardnet.db"\n\n[logging]\npath = "%s/wardnet-dev/logs/wardnetd.log"\nlevel = "debug"\n\n[network]\nlan_interface = "%s"\n\n[tunnel]\nkeys_dir = "%s/wardnet-dev/keys"\n%s' \
+	printf '[database]\npath = "%s/wardnet-dev/wardnet.db"\n\n[logging]\npath = "%s/wardnet-dev/logs/wardnetd.log"\nlevel = "debug"\n\n[network]\nlan_interface = "%s"\n\n[secret_store]\nprovider = "file_system"\npath = "%s/wardnet-dev/secrets"\n%s' \
 		"$$PI_HOME" "$$PI_HOME" "$(PI_LAN_IF)" "$$PI_HOME" "$$OTEL_SECTION" > /tmp/wardnet-dev.toml && \
 	ssh $(PI_REMOTE) 'sudo systemctl stop wardnetd-dev 2>/dev/null; true' && \
-	ssh $(PI_REMOTE) 'mkdir -p ~/wardnet-dev/keys ~/wardnet-dev/logs' && \
+	ssh $(PI_REMOTE) 'mkdir -p ~/wardnet-dev/secrets ~/wardnet-dev/logs' && \
 	if [ "$(RESUME)" != "true" ]; then \
 		echo "Cleaning database (use RESUME=true to keep it)..." && \
 		ssh $(PI_REMOTE) 'rm -f ~/wardnet-dev/wardnet.db ~/wardnet-dev/wardnet.db-wal ~/wardnet-dev/wardnet.db-shm'; \
@@ -441,6 +461,8 @@ help:
 	@echo "                 Ctrl+C stops both. In-memory DB by default."
 	@echo "                 make run-dev                    (ephemeral in-memory DB)"
 	@echo "                 make run-dev RESUME=true        (persist DB at .wardnet-local/)"
+	@echo "  run-dev-daemon Run just wardnetd-mock on :7411 (same RESUME flag)"
+	@echo "  run-dev-web    Run just the Vite dev server on :7412"
 	@echo ""
 	@echo "  run-pi         Build, deploy, and run on Pi via SSH (interactive)"
 	@echo "                 Deletes the database by default for a clean start."

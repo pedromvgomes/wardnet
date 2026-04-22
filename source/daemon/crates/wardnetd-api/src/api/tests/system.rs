@@ -102,6 +102,9 @@ impl SystemService for MockSystemService {
             Err(_) => Err(AppError::Internal(anyhow::anyhow!("mock error"))),
         }
     }
+    async fn request_restart(&self) -> Result<(), AppError> {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +114,7 @@ impl SystemService for MockSystemService {
 fn make_state(auth: impl AuthService + 'static, system: impl SystemService + 'static) -> AppState {
     AppState::new(
         Arc::new(auth),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -343,6 +347,7 @@ async fn recent_errors_returns_populated_errors() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -463,6 +468,7 @@ async fn download_logs_returns_text_when_log_exists() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -552,6 +558,7 @@ async fn download_logs_formats_non_json_lines_as_is() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -625,6 +632,7 @@ async fn download_logs_finds_dated_file() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -698,6 +706,7 @@ async fn download_logs_no_file_returns_500() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

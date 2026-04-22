@@ -277,6 +277,7 @@ fn connect_info() -> ConnectInfo<SocketAddr> {
 fn build_state(dns_svc: impl DnsService + 'static) -> AppState {
     AppState::new(
         Arc::new(MockAuthService),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(dns_svc),
@@ -761,6 +762,7 @@ impl wardnetd_services::dns::server::DnsServer for FailingDnsServer {
 fn build_state_with_failing_server(dns_svc: impl DnsService + 'static) -> AppState {
     AppState::new(
         Arc::new(MockAuthService),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(dns_svc),
