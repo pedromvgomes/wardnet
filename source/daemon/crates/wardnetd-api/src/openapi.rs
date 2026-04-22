@@ -68,18 +68,35 @@ struct SecurityAddon;
 /// canonical copy so the daemon rebuilds whenever the asset changes.
 pub const LOGO_PNG: &[u8] = include_bytes!("../../../../web-ui/src/assets/logo.png");
 
+/// Vendored `@scalar/api-reference` standalone bundle, served from
+/// `/api/docs/scalar.js`. Embedding the bundle (instead of loading from a
+/// CDN) keeps the admin docs page working on an air-gapped Pi and removes
+/// a supply-chain surface — a compromised `cdn.jsdelivr.net` would
+/// otherwise execute arbitrary JS inside the admin session. Pinned to the
+/// upstream version listed below; refresh with:
+///
+/// ```sh
+/// curl -sL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@<version>/dist/browser/standalone.js" \
+///   -o source/daemon/crates/wardnetd-api/assets/scalar-api-reference.js
+/// ```
+///
+/// Current pin: `1.52.5`.
+pub const SCALAR_JS: &[u8] = include_bytes!("../assets/scalar-api-reference.js");
+
 /// HTML for the `/api/docs` Scalar UI.
 ///
-/// Pulled in via Scalar's public CDN script (`@scalar/api-reference`), with a
-/// `<style>` block that retargets Scalar's built-in `--scalar-sidebar-*` CSS
-/// variables to Wardnet's palette (deep indigo background, green accent).
-/// The overrides are scoped to both `.dark-mode .sidebar` and `.light-mode
-/// .sidebar` so the branded sidebar survives theme toggles. All other Scalar
-/// surfaces use its default theme.
+/// The `@scalar/api-reference` bundle is served from `/api/docs/scalar.js`
+/// (the [`SCALAR_JS`] const, vendored into the daemon binary) rather than
+/// loaded from a CDN, so the admin docs page works air-gapped and doesn't
+/// rely on an external origin whose compromise would run JS inside the
+/// admin session. The `<style>` block retargets Scalar's built-in
+/// `--scalar-sidebar-*` CSS variables to Wardnet's palette so the sidebar
+/// matches the admin app; all other Scalar surfaces use its default theme.
 ///
-/// The API spec is loaded from `/api/openapi.json` at runtime — both routes
-/// are admin-gated on the server side, so an unauthenticated visitor sees a
-/// 401 on either call.
+/// The API spec is loaded from `/api/openapi.json` at runtime — all three
+/// routes (`/api/docs`, `/api/docs/scalar.js`, `/api/openapi.json`) are
+/// admin-gated on the server side, so an unauthenticated visitor sees a
+/// 401 on any of them.
 pub const SCALAR_HTML: &str = r#"<!doctype html>
 <html lang="en">
 <head>
@@ -135,7 +152,7 @@ pub const SCALAR_HTML: &str = r#"<!doctype html>
 </head>
 <body>
   <div id="wardnet-api-docs"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script src="/api/docs/scalar.js"></script>
   <script>
     // Scalar 2.x programmatic API — gives us access to nested config keys
     // (`agent`, `showDeveloperTools`, `sources`) that the `data-configuration`

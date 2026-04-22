@@ -106,6 +106,23 @@ pub fn router(state: AppState) -> Router {
                     crate::openapi::LOGO_PNG,
                 )
             }),
+        )
+        .route(
+            "/api/docs/scalar.js",
+            get(|_: middleware::AdminAuth| async {
+                // Vendored @scalar/api-reference bundle (pinned in `openapi.rs`).
+                // Served from the daemon itself so /api/docs doesn't depend on
+                // an external CDN — works offline and kills the supply-chain
+                // surface a compromised CDN would otherwise offer inside the
+                // admin session.
+                (
+                    [(
+                        axum::http::header::CONTENT_TYPE,
+                        "application/javascript; charset=utf-8",
+                    )],
+                    crate::openapi::SCALAR_JS,
+                )
+            }),
         );
 
     Router::new()

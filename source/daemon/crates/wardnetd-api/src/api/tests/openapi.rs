@@ -189,6 +189,7 @@ fn scalar_html_wires_runtime_config() {
     for needle in [
         "/api/openapi.json",
         "/api/docs/logo.png",
+        "/api/docs/scalar.js",
         "/favicon-32.png",
         "agent: { disabled: true }",
         "mcp: { disabled: true }",
@@ -202,6 +203,31 @@ fn scalar_html_wires_runtime_config() {
             "SCALAR_HTML missing required snippet: {needle}"
         );
     }
+}
+
+#[test]
+fn scalar_bundle_is_embedded_and_looks_like_the_upstream_standalone() {
+    let bytes = crate::openapi::SCALAR_JS;
+    assert!(
+        bytes.len() > 100_000,
+        "vendored Scalar bundle looks truncated: {} bytes (expected ~3.6 MB)",
+        bytes.len()
+    );
+    let head = std::str::from_utf8(&bytes[..256.min(bytes.len())]).unwrap_or("");
+    // A couple of cheap signals that this is actually the @scalar/api-reference
+    // standalone bundle and not a random placeholder.
+    assert!(
+        head.contains("Scalar") || bytes.windows(7).any(|w| w == b"Scalar "),
+        "bundle doesn't appear to reference Scalar in the first 256 bytes or anywhere in-file"
+    );
+}
+
+#[tokio::test]
+async fn scalar_js_rejects_unauthenticated_callers() {
+    assert_eq!(
+        unauth_status("/api/docs/scalar.js").await,
+        StatusCode::UNAUTHORIZED
+    );
 }
 
 #[test]
