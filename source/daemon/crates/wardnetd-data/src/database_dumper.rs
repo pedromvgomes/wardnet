@@ -160,14 +160,19 @@ impl DatabaseDumper for SqliteDumper {
                 })?;
         }
 
-        tokio::fs::rename(&staging, &self.database_path)
-            .await
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "failed to swap restored database into {}: {e}",
-                    self.database_path.display()
-                )
-            })?;
+        if let Err(e) = tokio::fs::rename(&staging, &self.database_path).await {
+            // Cross-filesystem rename, dest-permission error, etc. —
+            // clean up the orphaned staging file best-effort so
+            // repeated failed attempts don't litter the directory.
+            let staging_clone = staging.clone();
+            tokio::spawn(async move {
+                let _ = tokio::fs::remove_file(&staging_clone).await;
+            });
+            return Err(anyhow::anyhow!(
+                "failed to swap restored database into {}: {e}",
+                self.database_path.display()
+            ));
+        }
 
         // Reconnect against the fresh file and read back the schema
         // version — lets the caller log it and decide whether to run

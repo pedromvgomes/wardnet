@@ -122,6 +122,25 @@ const SECRETS_PREFIX: &str = "secrets/";
 /// high" guard.
 const SCRYPT_MAX_WORK_FACTOR: u8 = 20;
 
+/// Ceiling on total decompressed bundle size, enforced during unpack.
+///
+/// A crafted bundle could contain a tiny gzip that inflates to
+/// terabytes (a classic decompression bomb). The bundle has to decrypt
+/// first, so only a valid passphrase holder can trigger it — but an
+/// operator who reused a stolen passphrase, or a malicious future
+/// admin, can still OOM the daemon.
+///
+/// Realistic bundles sit in the low-MiB range (`SQLite` DB + config +
+/// `WireGuard` keys). 1 GiB is a generous ceiling that still fits on a
+/// 4 GiB Pi and stops obvious bombs immediately.
+///
+/// TODO(streaming-unpack): decompression is still fully buffered in
+/// memory. For low-memory hosts we should stream the decrypted gzip
+/// into a temp directory on disk instead — the service can then read
+/// each bundle member off disk and only materialise one at a time.
+/// Tracking issue: task follow-up after PR 1.
+const MAX_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
+
 #[async_trait]
 impl BackupArchiver for AgeArchiver {
     async fn pack(&self, passphrase: &str, contents: BundleContents) -> anyhow::Result<Vec<u8>> {
@@ -214,6 +233,7 @@ fn unpack_sync(passphrase: &str, bytes: &[u8]) -> anyhow::Result<BundleContents>
     let mut database_bytes: Option<Vec<u8>> = None;
     let mut config_bytes: Option<Vec<u8>> = None;
     let mut secrets: Vec<SecretEntry> = Vec::new();
+    let mut cumulative_bytes: u64 = 0;
 
     for entry in tar
         .entries()
@@ -225,6 +245,19 @@ fn unpack_sync(passphrase: &str, bytes: &[u8]) -> anyhow::Result<BundleContents>
             .map_err(|e| anyhow::anyhow!("tar entry has invalid path: {e}"))?
             .to_string_lossy()
             .into_owned();
+
+        // Size check *before* reading the entry into memory — the tar
+        // header advertises a length we can trust not to exceed the
+        // decompressed stream. Rejecting early stops decompression bombs
+        // and oversized bundles before they OOM the daemon.
+        let declared = entry.header().size().unwrap_or(0);
+        cumulative_bytes = cumulative_bytes.saturating_add(declared);
+        if cumulative_bytes > MAX_UNCOMPRESSED_BYTES {
+            anyhow::bail!(
+                "bundle exceeds maximum uncompressed size ({MAX_UNCOMPRESSED_BYTES} bytes) — \
+                 running total {cumulative_bytes} at entry {path}"
+            );
+        }
 
         let mut buf = Vec::new();
         entry
