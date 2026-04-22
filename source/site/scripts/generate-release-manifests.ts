@@ -51,6 +51,28 @@ interface Manifest {
   notes_url: string;
 }
 
+/**
+ * One row of `public/releases/openapi-versions.json` — the docs page
+ * dropdown iterates over this list. Each row is a *distinct* OpenAPI
+ * document by content hash, and carries the span of release versions
+ * that shipped it so consumers can pick the right spec without
+ * guessing which release changed the API.
+ */
+interface OpenapiVersion {
+  /** SHA-256 of the openapi.json asset, hex lowercase. */
+  sha256: string;
+  /** Direct download URL of the openapi.json asset on GitHub. */
+  openapi_url: string;
+  /** Every release version that served this exact spec, sorted ascending. */
+  versions: string[];
+  /** Convenience: `versions[0]`. */
+  first_version: string;
+  /** Convenience: `versions[versions.length - 1]`. */
+  latest_version: string;
+  /** True if any release in this group is a pre-release (beta channel). */
+  includes_prerelease: boolean;
+}
+
 /** Shape emitted to `src/generated/release-info.ts`. Consumed by the homepage. */
 interface ReleaseInfo {
   stable: Manifest | null;
@@ -176,6 +198,93 @@ async function writeManifest(path: string, manifest: Manifest | null): Promise<v
   console.log(`wrote ${path}`);
 }
 
+/**
+ * Build the list of distinct OpenAPI spec versions across all releases.
+ *
+ * For each release that shipped `openapi.json` + `openapi.json.sha256`,
+ * read the sha256 file (small, one extra fetch per release) and group
+ * by hash. The output is sorted newest-first so the docs dropdown puts
+ * the current spec at the top.
+ *
+ * Releases without the openapi assets are skipped silently — releases
+ * predating the OpenAPI publishing step will simply not appear.
+ */
+async function buildOpenapiVersions(releases: GithubRelease[]): Promise<OpenapiVersion[]> {
+  // Map: sha256 -> group accumulator.
+  const groups = new Map<
+    string,
+    {
+      sha256: string;
+      openapi_url: string;
+      versions: { version: string; parsed: semver.SemVer }[];
+      includes_prerelease: boolean;
+    }
+  >();
+
+  // Walk releases newest-first so the first URL we record for a given
+  // hash is the newest — stable enough for a human-friendly link.
+  const ordered = releases
+    .filter((r) => !r.draft)
+    .map((r) => ({ release: r, version: parseVersion(r.tag_name) }))
+    .filter(
+      (entry): entry is { release: GithubRelease; version: semver.SemVer } =>
+        entry.version !== null,
+    );
+  ordered.sort((a, b) => semver.rcompare(a.version, b.version));
+
+  for (const { release, version } of ordered) {
+    const json = release.assets.find((a) => a.name === "openapi.json");
+    const sha = release.assets.find((a) => a.name === "openapi.json.sha256");
+    if (!json || !sha) continue;
+
+    let hash: string;
+    try {
+      const resp = await fetch(sha.browser_download_url);
+      if (!resp.ok) {
+        console.warn(
+          `openapi-versions: skipping ${release.tag_name}: sha256 fetch failed (${resp.status})`,
+        );
+        continue;
+      }
+      hash = (await resp.text()).trim().split(/\s+/)[0]!.toLowerCase();
+    } catch (err) {
+      console.warn(`openapi-versions: skipping ${release.tag_name}: ${(err as Error).message}`);
+      continue;
+    }
+
+    const existing = groups.get(hash);
+    if (existing) {
+      existing.versions.push({ version: version.version, parsed: version });
+      existing.includes_prerelease ||= release.prerelease || version.prerelease.length > 0;
+    } else {
+      groups.set(hash, {
+        sha256: hash,
+        openapi_url: json.browser_download_url,
+        versions: [{ version: version.version, parsed: version }],
+        includes_prerelease: release.prerelease || version.prerelease.length > 0,
+      });
+    }
+  }
+
+  // Sort each group's version list ascending for display, then sort the
+  // groups themselves by their latest_version descending.
+  const rows: OpenapiVersion[] = [];
+  for (const g of groups.values()) {
+    g.versions.sort((a, b) => semver.compare(a.parsed, b.parsed));
+    const versions = g.versions.map((v) => v.version);
+    rows.push({
+      sha256: g.sha256,
+      openapi_url: g.openapi_url,
+      versions,
+      first_version: versions[0]!,
+      latest_version: versions[versions.length - 1]!,
+      includes_prerelease: g.includes_prerelease,
+    });
+  }
+  rows.sort((a, b) => semver.rcompare(a.latest_version, b.latest_version));
+  return rows;
+}
+
 async function writeReleaseInfo(info: ReleaseInfo): Promise<void> {
   const path = resolve(GENERATED_DIR, "release-info.ts");
   await mkdir(GENERATED_DIR, { recursive: true });
@@ -228,6 +337,12 @@ async function main(): Promise<void> {
 
   await writeManifest(resolve(PUBLIC_RELEASES, "stable.json"), stableManifest);
   await writeManifest(resolve(PUBLIC_RELEASES, "beta.json"), betaManifest);
+
+  const openapiVersions = await buildOpenapiVersions(releases);
+  const openapiManifestPath = resolve(PUBLIC_RELEASES, "openapi-versions.json");
+  await mkdir(dirname(openapiManifestPath), { recursive: true });
+  await writeFile(openapiManifestPath, `${JSON.stringify(openapiVersions, null, 2)}\n`, "utf8");
+  console.log(`wrote ${openapiManifestPath} (${openapiVersions.length} distinct spec versions)`);
 
   await writeReleaseInfo({
     stable: stableManifest,

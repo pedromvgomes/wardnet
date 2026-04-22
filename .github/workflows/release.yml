@@ -246,6 +246,19 @@ jobs:
           path: release-artefacts/
           merge-multiple: true
 
+      - name: Stage OpenAPI spec + sha256
+        # Publish the committed `docs/openapi.json` alongside the binary as
+        # a release asset so external consumers can download the spec for a
+        # specific daemon version without running the daemon itself. The
+        # .sha256 companion lets the site's manifest generator dedupe across
+        # releases without fetching the full JSON for every historical tag.
+        run: |
+          set -euo pipefail
+          cp docs/openapi.json release-artefacts/openapi.json
+          sha256sum release-artefacts/openapi.json | awk '{print $1}' \
+            > release-artefacts/openapi.json.sha256
+          ls -l release-artefacts/openapi.*
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -274,7 +287,9 @@ jobs:
           gh release create "${TAG}" "${ARGS[@]}" \
             release-artefacts/*.tar.gz \
             release-artefacts/*.tar.gz.sha256 \
-            release-artefacts/*.tar.gz.minisig
+            release-artefacts/*.tar.gz.minisig \
+            release-artefacts/openapi.json \
+            release-artefacts/openapi.json.sha256
 
       - name: Dispatch deploy-site so the marketing site picks up the new release
         # `release: [published]` on deploy-site.yml does NOT fire when the
