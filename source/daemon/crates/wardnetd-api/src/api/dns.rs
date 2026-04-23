@@ -1,6 +1,8 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use uuid::Uuid;
 use wardnet_common::api::{
     CreateAllowlistRequest, CreateAllowlistResponse, CreateBlocklistRequest,
@@ -14,10 +16,41 @@ use wardnet_common::api::{
 use wardnet_common::jobs::JobDispatchedResponse;
 
 use crate::api::middleware::AdminAuth;
+use crate::api::responses::{AuthErrors, BadRequest, NotFound};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
 
-/// GET /api/dns/config
+/// Register DNS routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(get_config, update_config))
+        .routes(routes!(toggle))
+        .routes(routes!(status))
+        .routes(routes!(flush_cache))
+        .routes(routes!(list_blocklists, create_blocklist))
+        .routes(routes!(update_blocklist, delete_blocklist))
+        .routes(routes!(update_blocklist_now))
+        .routes(routes!(list_allowlist, create_allowlist_entry))
+        .routes(routes!(delete_allowlist_entry))
+        .routes(routes!(list_filter_rules, create_filter_rule))
+        .routes(routes!(update_filter_rule, delete_filter_rule))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/dns/config",
+    tag = "dns",
+    description = "Return the current DNS filter configuration (enabled flag, cache size, \
+                   upstream resolvers). Admin only.",
+    responses(
+        (status = 200, description = "Current DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn get_config(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -26,7 +59,24 @@ pub async fn get_config(
     Ok(Json(response))
 }
 
-/// PUT /api/dns/config
+#[utoipa::path(
+    put,
+    path = "/api/dns/config",
+    tag = "dns",
+    description = "Update the DNS filter configuration (cache size, upstream resolvers, \
+                   and related options). Does not toggle the enabled flag — use the \
+                   /api/dns/config/toggle endpoint for that. Admin only.",
+    request_body = UpdateDnsConfigRequest,
+    responses(
+        (status = 200, description = "Updated DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_config(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -36,7 +86,24 @@ pub async fn update_config(
     Ok(Json(response))
 }
 
-/// POST /api/dns/config/toggle
+#[utoipa::path(
+    post,
+    path = "/api/dns/config/toggle",
+    tag = "dns",
+    description = "Enable or disable the DNS filter server. In addition to persisting \
+                   the enabled flag, this starts or stops the live DNS server process \
+                   so the change takes effect immediately. Admin only.",
+    request_body = ToggleDnsRequest,
+    responses(
+        (status = 200, description = "Updated DNS configuration", body = DnsConfigResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn toggle(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -45,18 +112,49 @@ pub async fn toggle(
     let enabled = body.enabled;
     let response = state.dns_service().toggle(body).await?;
 
-    if enabled {
-        if let Err(e) = state.dns_server().start().await {
-            tracing::error!(error = %e, "failed to start DNS server");
+    // If the runtime transition fails we roll the persisted flag back so
+    // subsequent reads reflect what's actually running — otherwise
+    // `GET /api/dns/config` claims `enabled: true` while the server never
+    // bound port 53.
+    let transition = if enabled {
+        state.dns_server().start().await
+    } else {
+        state.dns_server().stop().await
+    };
+    if let Err(e) = transition {
+        if let Err(revert_err) = state
+            .dns_service()
+            .toggle(ToggleDnsRequest { enabled: !enabled })
+            .await
+        {
+            tracing::error!(
+                error = %revert_err,
+                "failed to revert DNS config after {op} failure: original={e}",
+                op = if enabled { "start" } else { "stop" },
+                e = e,
+            );
         }
-    } else if let Err(e) = state.dns_server().stop().await {
-        tracing::error!(error = %e, "failed to stop DNS server");
+        return Err(e.into());
     }
 
     Ok(Json(response))
 }
 
-/// GET /api/dns/status
+#[utoipa::path(
+    get,
+    path = "/api/dns/status",
+    tag = "dns",
+    description = "Return live DNS server status and cache statistics (running flag, \
+                   cache size/capacity, cache hit rate). Admin only.",
+    responses(
+        (status = 200, description = "DNS server status and cache stats", body = DnsStatusResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn status(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -72,7 +170,22 @@ pub async fn status(
     }))
 }
 
-/// POST /api/dns/cache/flush
+#[utoipa::path(
+    post,
+    path = "/api/dns/cache/flush",
+    tag = "dns",
+    description = "Flush the DNS resolver cache, clearing every cached record so \
+                   subsequent queries resolve against upstream. Returns the count of \
+                   entries that were cleared. Admin only.",
+    responses(
+        (status = 200, description = "Cache flushed", body = DnsCacheFlushResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn flush_cache(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -88,7 +201,21 @@ pub async fn flush_cache(
 // Blocklists
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/blocklists
+#[utoipa::path(
+    get,
+    path = "/api/dns/blocklists",
+    tag = "dns",
+    description = "List every configured DNS blocklist source, along with its enabled \
+                   flag, last-updated timestamp, and entry count. Admin only.",
+    responses(
+        (status = 200, description = "List of blocklists", body = ListBlocklistsResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_blocklists(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -97,7 +224,23 @@ pub async fn list_blocklists(
     Ok(Json(response))
 }
 
-/// POST /api/dns/blocklists
+#[utoipa::path(
+    post,
+    path = "/api/dns/blocklists",
+    tag = "dns",
+    description = "Register a new DNS blocklist source (URL + format) that the daemon \
+                   will periodically fetch and compile into the filter. Admin only.",
+    request_body = CreateBlocklistRequest,
+    responses(
+        (status = 201, description = "Blocklist created", body = CreateBlocklistResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -107,7 +250,25 @@ pub async fn create_blocklist(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// PUT /api/dns/blocklists/{id}
+#[utoipa::path(
+    put,
+    path = "/api/dns/blocklists/{id}",
+    tag = "dns",
+    description = "Update an existing DNS blocklist (URL, label, enabled flag, or \
+                   refresh interval). Admin only.",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    request_body = UpdateBlocklistRequest,
+    responses(
+        (status = 200, description = "Updated blocklist", body = UpdateBlocklistResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -118,7 +279,23 @@ pub async fn update_blocklist(
     Ok(Json(response))
 }
 
-/// DELETE /api/dns/blocklists/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/blocklists/{id}",
+    tag = "dns",
+    description = "Delete a DNS blocklist by ID. Any entries contributed by this \
+                   blocklist are removed from the active filter. Admin only.",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    responses(
+        (status = 200, description = "Blocklist deleted", body = DeleteBlocklistResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_blocklist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -128,9 +305,25 @@ pub async fn delete_blocklist(
     Ok(Json(response))
 }
 
-/// POST /api/dns/blocklists/{id}/update — dispatches a background job that
-/// fetches, parses, and stores the blocklist. Returns 202 Accepted with the
-/// job id so the client can poll `GET /api/jobs/:id` for progress.
+#[utoipa::path(
+    post,
+    path = "/api/dns/blocklists/{id}/update",
+    tag = "dns",
+    description = "Trigger an immediate refresh of a blocklist. Dispatches a background \
+                   job that fetches, parses, and stores the blocklist, then returns \
+                   202 Accepted with the job id so the client can poll \
+                   /api/jobs/{id} for progress. Admin only.",
+    params(("id" = Uuid, Path, description = "Blocklist ID")),
+    responses(
+        (status = 202, description = "Background update job dispatched", body = JobDispatchedResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_blocklist_now(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -144,7 +337,21 @@ pub async fn update_blocklist_now(
 // Allowlist
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/allowlist
+#[utoipa::path(
+    get,
+    path = "/api/dns/allowlist",
+    tag = "dns",
+    description = "List every entry in the DNS allowlist. Allowlisted domains bypass \
+                   blocklist entries and always resolve. Admin only.",
+    responses(
+        (status = 200, description = "List of allowlist entries", body = ListAllowlistResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_allowlist(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -153,7 +360,23 @@ pub async fn list_allowlist(
     Ok(Json(response))
 }
 
-/// POST /api/dns/allowlist
+#[utoipa::path(
+    post,
+    path = "/api/dns/allowlist",
+    tag = "dns",
+    description = "Add a domain to the DNS allowlist so it is never blocked, regardless \
+                   of blocklist contents. Admin only.",
+    request_body = CreateAllowlistRequest,
+    responses(
+        (status = 201, description = "Allowlist entry created", body = CreateAllowlistResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_allowlist_entry(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -163,7 +386,24 @@ pub async fn create_allowlist_entry(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// DELETE /api/dns/allowlist/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/allowlist/{id}",
+    tag = "dns",
+    description = "Remove a domain from the DNS allowlist. If the domain is also \
+                   listed by an active blocklist, it will start being blocked again. \
+                   Admin only.",
+    params(("id" = Uuid, Path, description = "Allowlist entry ID")),
+    responses(
+        (status = 200, description = "Allowlist entry deleted", body = DeleteAllowlistResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_allowlist_entry(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -177,7 +417,22 @@ pub async fn delete_allowlist_entry(
 // Custom filter rules
 // ---------------------------------------------------------------------------
 
-/// GET /api/dns/rules
+#[utoipa::path(
+    get,
+    path = "/api/dns/rules",
+    tag = "dns",
+    description = "List every custom DNS filter rule (allow, block, or rewrite) \
+                   configured by the admin. Custom rules are evaluated alongside \
+                   blocklists and allowlists. Admin only.",
+    responses(
+        (status = 200, description = "List of custom filter rules", body = ListFilterRulesResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_filter_rules(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -186,7 +441,24 @@ pub async fn list_filter_rules(
     Ok(Json(response))
 }
 
-/// POST /api/dns/rules
+#[utoipa::path(
+    post,
+    path = "/api/dns/rules",
+    tag = "dns",
+    description = "Create a custom DNS filter rule — a named allow/block/rewrite \
+                   entry the admin maintains alongside the imported blocklists. \
+                   Admin only.",
+    request_body = CreateFilterRuleRequest,
+    responses(
+        (status = 201, description = "Filter rule created", body = CreateFilterRuleResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn create_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -196,7 +468,25 @@ pub async fn create_filter_rule(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// PUT /api/dns/rules/{id}
+#[utoipa::path(
+    put,
+    path = "/api/dns/rules/{id}",
+    tag = "dns",
+    description = "Update a custom DNS filter rule in place (pattern, action, enabled \
+                   flag). Admin only.",
+    params(("id" = Uuid, Path, description = "Filter rule ID")),
+    request_body = UpdateFilterRuleRequest,
+    responses(
+        (status = 200, description = "Updated filter rule", body = UpdateFilterRuleResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -207,7 +497,22 @@ pub async fn update_filter_rule(
     Ok(Json(response))
 }
 
-/// DELETE /api/dns/rules/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/dns/rules/{id}",
+    tag = "dns",
+    description = "Delete a custom DNS filter rule by ID. Admin only.",
+    params(("id" = Uuid, Path, description = "Filter rule ID")),
+    responses(
+        (status = 200, description = "Filter rule deleted", body = DeleteFilterRuleResponse),
+        AuthErrors,
+        NotFound,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn delete_filter_rule(
     State(state): State<AppState>,
     _auth: AdminAuth,

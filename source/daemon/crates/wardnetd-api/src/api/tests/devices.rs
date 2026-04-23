@@ -310,6 +310,7 @@ fn build_state_with_dhcp(
 ) -> AppState {
     AppState::new(
         Arc::new(MockAuthService),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(device_svc),
         Arc::new(dhcp_svc),
         Arc::new(StubDnsService),

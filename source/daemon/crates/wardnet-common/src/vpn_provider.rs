@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Supported authentication methods for a VPN provider.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAuthMethod {
     /// Username + password (service credentials).
@@ -11,7 +11,7 @@ pub enum ProviderAuthMethod {
 }
 
 /// Metadata about a registered VPN provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ProviderInfo {
     /// Unique machine identifier (e.g. "nordvpn").
     pub id: String,
@@ -31,7 +31,7 @@ pub struct ProviderInfo {
 }
 
 /// Credentials submitted by the admin for provider operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProviderCredentials {
     /// Username/password pair (service credentials).
@@ -48,8 +48,29 @@ pub enum ProviderCredentials {
     },
 }
 
+// Redact secret fields so `tracing::debug!(?req)` anywhere in the
+// provider flow can't leak service passwords or API tokens. Wrapping
+// DTOs (ValidateCredentialsRequest, ListServersRequest,
+// SetupProviderRequest) keep their derived `Debug` and pick up this
+// redaction transparently via the field's own impl.
+impl std::fmt::Debug for ProviderCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Credentials { username, .. } => f
+                .debug_struct("Credentials")
+                .field("username", username)
+                .field("password", &"[REDACTED]")
+                .finish(),
+            Self::Token { .. } => f
+                .debug_struct("Token")
+                .field("token", &"[REDACTED]")
+                .finish(),
+        }
+    }
+}
+
 /// Filters for server listing.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ServerFilter {
     /// ISO 3166-1 alpha-2 country code.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,7 +81,7 @@ pub struct ServerFilter {
 }
 
 /// A country available from a VPN provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CountryInfo {
     /// ISO 3166-1 alpha-2 country code (e.g. "US").
     pub code: String,
@@ -69,7 +90,7 @@ pub struct CountryInfo {
 }
 
 /// Information about a single VPN server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ServerInfo {
     /// Provider-specific server identifier.
     pub id: String,

@@ -13,9 +13,9 @@ use wardnet_common::api::SetupStatusResponse;
 
 use crate::state::AppState;
 use crate::tests::stubs::{
-    StubDeviceService, StubDhcpServer, StubDhcpService, StubDiscoveryService, StubDnsServer,
-    StubDnsService, StubEventPublisher, StubLogService, StubProviderService, StubRoutingService,
-    StubSystemService, StubTunnelService,
+    StubBackupService, StubDeviceService, StubDhcpServer, StubDhcpService, StubDiscoveryService,
+    StubDnsServer, StubDnsService, StubEventPublisher, StubLogService, StubProviderService,
+    StubRoutingService, StubSystemService, StubTunnelService,
 };
 use wardnetd_services::AuthService;
 use wardnetd_services::LogService;
@@ -61,6 +61,7 @@ impl AuthService for MockSetupAuthService {
 fn make_state(auth: impl AuthService + 'static) -> AppState {
     AppState::new(
         Arc::new(auth),
+        Arc::new(StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

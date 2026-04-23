@@ -102,6 +102,9 @@ impl SystemService for MockSystemService {
             Err(_) => Err(AppError::Internal(anyhow::anyhow!("mock error"))),
         }
     }
+    async fn request_restart(&self) -> Result<(), AppError> {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +114,7 @@ impl SystemService for MockSystemService {
 fn make_state(auth: impl AuthService + 'static, system: impl SystemService + 'static) -> AppState {
     AppState::new(
         Arc::new(auth),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -141,6 +145,10 @@ fn system_app_full(state: AppState) -> Router {
         .route(
             "/api/system/logs/download",
             get(crate::api::system::download_logs),
+        )
+        .route(
+            "/api/system/restart",
+            axum::routing::post(crate::api::system::restart),
         )
         .with_state(state)
 }
@@ -343,6 +351,7 @@ async fn recent_errors_returns_populated_errors() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -463,6 +472,7 @@ async fn download_logs_returns_text_when_log_exists() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -552,6 +562,7 @@ async fn download_logs_formats_non_json_lines_as_is() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -625,6 +636,7 @@ async fn download_logs_finds_dated_file() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -698,6 +710,7 @@ async fn download_logs_no_file_returns_500() {
 
     let state = AppState::new(
         Arc::new(AlwaysAuthService { admin_id }),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),
@@ -720,6 +733,90 @@ async fn download_logs_no_file_returns_500() {
     let req = Request::builder()
         .uri("/api/system/logs/download")
         .header("Cookie", "wardnet_session=valid-token")
+        .extension(connect_info_ext())
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/system/restart
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn restart_returns_204_on_success() {
+    let admin_id = Uuid::new_v4();
+    let state = make_state(
+        AlwaysAuthService { admin_id },
+        MockSystemService {
+            response: Ok(default_status()),
+        },
+    );
+
+    let app = system_app_full(state);
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/system/restart")
+        .header("Cookie", "wardnet_session=valid-token")
+        .extension(connect_info_ext())
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn restart_requires_authentication() {
+    let state = make_state(
+        NeverAuthService,
+        MockSystemService {
+            response: Ok(default_status()),
+        },
+    );
+
+    let app = system_app_full(state);
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/system/restart")
+        .extension(connect_info_ext())
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn restart_surfaces_service_error_as_500() {
+    // A SystemService that returns an internal error from request_restart.
+    struct FailingRestartService;
+    #[async_trait]
+    impl SystemService for FailingRestartService {
+        fn version(&self) -> &'static str {
+            "0.0.0"
+        }
+        fn uptime(&self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+        async fn status(&self) -> Result<SystemStatusResponse, AppError> {
+            unimplemented!()
+        }
+        async fn request_restart(&self) -> Result<(), AppError> {
+            Err(AppError::Internal(anyhow::anyhow!("shutdown not wired")))
+        }
+    }
+
+    let admin_id = Uuid::new_v4();
+    let state = make_state(AlwaysAuthService { admin_id }, FailingRestartService);
+    let app = system_app_full(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/system/restart")
+        .header("Authorization", "Bearer k")
         .extension(connect_info_ext())
         .body(Body::empty())
         .unwrap();

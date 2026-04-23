@@ -20,8 +20,9 @@ level = "info"
 [network]
 lan_interface = "eth0"
 
-[tunnel]
-keys_dir = "/etc/wardnet/keys"
+[secret_store]
+provider = "file_system"
+path = "/var/lib/wardnet/secrets"
 ```
 
 Reload the daemon after editing:
@@ -90,14 +91,44 @@ username = "admin"
 password = "…"
 ```
 
+## `[secret_store]`
+
+Where Wardnet keeps secret material — WireGuard private keys today,
+backup passphrases and destination credentials in upcoming releases.
+Anything that must never appear in the database, the API, or the logs
+lives here.
+
+The section is **optional**. Omit it entirely to run without a secret
+store: the daemon still starts and serves DHCP, DNS, and device
+detection, but tunnel creation and backup features refuse with
+`"no secret store configured"` until you add a provider.
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `provider` | _(required when section is present)_ | Storage backend. Only `file_system` is supported today. Future: `hashicorp_vault`, `azure_key_vault`, `aws_secrets_manager`. |
+
+### `provider = "file_system"`
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `path` | _(required)_ | Directory that holds secret files (mode 0700, owned by `wardnet`). Files inside are 0600. Must be writable by the daemon and on persistent (non-tmpfs) storage. |
+
+```toml
+[secret_store]
+provider = "file_system"
+path = "/var/lib/wardnet/secrets"
+```
+
 ## `[tunnel]`
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `keys_dir` | `"/etc/wardnet/keys"` | Where WireGuard private keys are stored (mode 0700). |
 | `idle_timeout_secs` | `600` | Tear down tunnels idle for this long. |
 | `health_check_interval_secs` | `10` | How often to poll each tunnel for liveness. |
 | `stats_interval_secs` | `5` | How often to pull bytes-tx/rx counters. |
+
+Tunnel private keys are stored via `[secret_store]` (above) — they are
+not configured here.
 
 ## `[detection]`
 

@@ -61,6 +61,7 @@ impl JobService for FixedJobService {
 fn build_state(job_service: Arc<dyn JobService>) -> AppState {
     AppState::new(
         Arc::new(AlwaysAdminAuth),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService) as Arc<dyn wardnetd_services::DnsService>,

@@ -23,7 +23,6 @@ use wardnetd_data::create_repository_factory;
 use wardnetd_mock::backends::noop_device::{NoopHostnameResolver, NoopPacketCapture};
 use wardnetd_mock::backends::noop_dhcp::NoopDhcpServer;
 use wardnetd_mock::backends::noop_dns::NoopDnsServer;
-use wardnetd_mock::backends::noop_keys::InMemoryKeyStore;
 use wardnetd_mock::backends::noop_routing::{NoopFirewallManager, NoopPolicyRouter};
 use wardnetd_mock::backends::noop_tunnel::NoopTunnelInterface;
 use wardnetd_mock::events::FakeEventEmitter;
@@ -32,6 +31,7 @@ use wardnetd_services::dns::blocklist_downloader::HttpBlocklistFetcher;
 use wardnetd_services::logging::{
     ErrorNotifierService, LogService, LogServiceImpl, LogStreamService,
 };
+use wardnetd_services::secret_store::FileSecretStore;
 use wardnetd_services::update::{
     EMBEDDED_PUBLIC_KEY, FsBinaryApplier, HttpsManifestSource, Sha256MinisignVerifier,
 };
@@ -165,15 +165,46 @@ async fn run(
             mock_update_dir.join("staging"),
         )),
     };
+    // Real file-backed secret store rooted under the OS temp directory so
+    // the mock exercises the exact same save/load code path as production.
+    let mock_secrets_root = std::env::temp_dir().join("wardnet-mock").join("secrets");
+    tokio::fs::create_dir_all(&mock_secrets_root)
+        .await
+        .expect("failed to create mock secret store root");
+    let secret_store: Arc<dyn wardnetd_services::secret_store::SecretStore> =
+        Arc::new(FileSecretStore::new(mock_secrets_root));
+
+    // Synthetic config path — the mock uses CLI flags rather than a
+    // wardnet.toml, so we write an empty placeholder that the backup
+    // service can still read on export.
+    let mock_config_path = std::env::temp_dir()
+        .join("wardnet-mock")
+        .join("wardnet.toml");
+    if !mock_config_path.exists() {
+        if let Some(parent) = mock_config_path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let _ = tokio::fs::write(&mock_config_path, b"# mock wardnet.toml\n").await;
+    }
+
+    // Token is wired through the mock too so the Settings restart
+    // button behaves identically in dev — it cancels the token,
+    // `shutdown_signal` wakes up, and the mock exits. The operator
+    // reruns `make run-dev` to bring it back.
+    let shutdown_token = tokio_util::sync::CancellationToken::new();
+
     let backends = Backends {
         tunnel_interface: Arc::new(NoopTunnelInterface),
         policy_router: Arc::new(NoopPolicyRouter),
         firewall: Arc::new(NoopFirewallManager),
         packet_capture: Arc::new(NoopPacketCapture),
         hostname_resolver: Arc::new(NoopHostnameResolver),
-        key_store: Arc::new(InMemoryKeyStore::default()),
+        secret_store,
         blocklist_fetcher: Arc::new(HttpBlocklistFetcher::new()),
         update: update_backends,
+        config_path: mock_config_path,
+        host_id: "wardnetd-mock".to_owned(),
+        shutdown_token: shutdown_token.clone(),
     };
 
     // A synthetic LAN IP that looks plausible in UI copy.
@@ -197,6 +228,7 @@ async fn run(
 
     let state = AppState::new(
         services.auth.clone(),
+        services.backup.clone(),
         services.device.clone(),
         services.dhcp.clone(),
         services.dns.clone(),
@@ -238,7 +270,7 @@ async fn run(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(shutdown_signal(shutdown_token.clone()))
     .into_future()
     .instrument(api_span)
     .await?;
@@ -279,7 +311,7 @@ fn init_tracing(verbose: bool, log_service: &dyn LogService) {
     log_service.start_all();
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(restart_token: tokio_util::sync::CancellationToken) {
     let ctrl_c = tokio::signal::ctrl_c();
 
     #[cfg(unix)]
@@ -289,12 +321,16 @@ async fn shutdown_signal() {
         tokio::select! {
             _ = ctrl_c => {}
             _ = sigterm.recv() => {}
+            () = restart_token.cancelled() => {}
         }
     }
 
     #[cfg(not(unix))]
     {
-        ctrl_c.await.ok();
+        tokio::select! {
+            _ = ctrl_c => {}
+            () = restart_token.cancelled() => {}
+        }
     }
 
     tracing::info!("mock shutdown signal received");

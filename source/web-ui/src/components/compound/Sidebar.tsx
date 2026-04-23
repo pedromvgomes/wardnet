@@ -79,12 +79,22 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         )}
         <ConnectionStatus />
         {isAdmin ? (
-          <button
-            onClick={handleLogout}
-            className="text-left text-xs text-sidebar-foreground/40 transition-colors hover:text-sidebar-foreground/70"
-          >
-            Sign out
-          </button>
+          <>
+            <a
+              href="/api/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-left text-xs text-sidebar-foreground/40 transition-colors hover:text-sidebar-foreground/70"
+            >
+              API docs
+            </a>
+            <button
+              onClick={handleLogout}
+              className="text-left text-xs text-sidebar-foreground/40 transition-colors hover:text-sidebar-foreground/70"
+            >
+              Sign out
+            </button>
+          </>
         ) : (
           <NavLink
             to="/login"

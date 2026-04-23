@@ -10,11 +10,10 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 use wardnet_common::config::ApplicationConfiguration;
 use wardnetd_data::SqliteRepositoryFactory;
 use wardnetd_data::db::init_pool_from_connection_string;
-use wardnetd_data::keys::KeyStore;
+use wardnetd_data::secret_store::SecretStore;
 
 use crate::Backends;
 use crate::device::hostname_resolver::HostnameResolver;
@@ -147,16 +146,19 @@ impl HostnameResolver for StubHostnameResolver {
     }
 }
 
-struct StubKeyStore;
+struct StubSecretStore;
 #[async_trait]
-impl KeyStore for StubKeyStore {
-    async fn save_key(&self, _tunnel_id: &Uuid, _private_key: &str) -> anyhow::Result<()> {
+impl SecretStore for StubSecretStore {
+    async fn put(&self, _path: &str, _value: &[u8]) -> anyhow::Result<()> {
         unimplemented!()
     }
-    async fn load_key(&self, _tunnel_id: &Uuid) -> anyhow::Result<String> {
+    async fn get(&self, _path: &str) -> anyhow::Result<Option<Vec<u8>>> {
         unimplemented!()
     }
-    async fn delete_key(&self, _tunnel_id: &Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, _path: &str) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    async fn list(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         unimplemented!()
     }
 }
@@ -172,13 +174,16 @@ fn stub_backends() -> Backends {
         firewall: Arc::new(StubFirewall),
         packet_capture: Arc::new(StubPacketCapture),
         hostname_resolver: Arc::new(StubHostnameResolver),
-        key_store: Arc::new(StubKeyStore),
+        secret_store: Arc::new(StubSecretStore),
         blocklist_fetcher: Arc::new(StubBlocklistFetcher),
         update: crate::UpdateBackends {
             release_source: Arc::new(StubReleaseSource),
             verifier: Arc::new(StubReleaseVerifier),
             applier: Arc::new(StubBinaryApplier),
         },
+        config_path: std::path::PathBuf::from("/tmp/wardnet-init-test.toml"),
+        host_id: "init-test-host".to_owned(),
+        shutdown_token: tokio_util::sync::CancellationToken::new(),
     }
 }
 
@@ -248,7 +253,7 @@ async fn init_services_with_factory_builds_every_service() {
     let pool = init_pool_from_connection_string(":memory:")
         .await
         .expect("in-memory pool");
-    let factory = SqliteRepositoryFactory::new(pool);
+    let factory = SqliteRepositoryFactory::from_pool(pool, std::path::PathBuf::from(":memory:"));
 
     let config = ApplicationConfiguration::default();
     let lan_ip = Ipv4Addr::new(192, 168, 1, 1);
@@ -284,7 +289,7 @@ async fn init_services_with_factory_respects_disabled_provider() {
     let pool = init_pool_from_connection_string(":memory:")
         .await
         .expect("in-memory pool");
-    let factory = SqliteRepositoryFactory::new(pool);
+    let factory = SqliteRepositoryFactory::from_pool(pool, std::path::PathBuf::from(":memory:"));
 
     let mut config = ApplicationConfiguration::default();
     config
@@ -368,7 +373,7 @@ async fn init_services_with_broadcast_lan_ip_falls_back_to_default_subnet() {
     let pool = init_pool_from_connection_string(":memory:")
         .await
         .expect("in-memory pool");
-    let factory = SqliteRepositoryFactory::new(pool);
+    let factory = SqliteRepositoryFactory::from_pool(pool, std::path::PathBuf::from(":memory:"));
     let config = ApplicationConfiguration::default();
 
     let services = init_services_with_factory(

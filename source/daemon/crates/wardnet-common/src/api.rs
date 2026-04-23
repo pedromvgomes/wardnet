@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::backup::{BackupStatus, BundleManifest, LocalSnapshot};
 use crate::device::{Device, DeviceType, DhcpStatus};
 use crate::dhcp::{DhcpConfig, DhcpLease, DhcpReservation};
 use crate::dns::{
@@ -13,20 +14,39 @@ use crate::vpn_provider::{
 };
 
 /// Login request body.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
+// Redact `password` so a stray `tracing::debug!(?req)` in the auth path
+// can't leak the plaintext into logs.
+impl std::fmt::Debug for LoginRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoginRequest")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// Login response body.
-#[derive(Debug, Serialize)]
+///
+/// `token` is the same opaque value written into the `wardnet_session` cookie;
+/// non-browser clients (e.g. scripts that don't maintain a cookie jar) can
+/// replay it on admin-gated requests via the `Authorization: Bearer <token>`
+/// header. `expires_in_seconds` is the token's remaining lifetime measured
+/// from the moment this response was generated.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct LoginResponse {
     pub message: String,
+    pub token: String,
+    pub expires_in_seconds: u64,
 }
 
 /// Minimal tunnel info exposed to self-service users for routing selection.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TunnelSummary {
     pub id: String,
     pub label: String,
@@ -34,7 +54,7 @@ pub struct TunnelSummary {
 }
 
 /// Response for GET /api/devices/me.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DeviceMeResponse {
     pub device: Option<Device>,
     pub current_rule: Option<RoutingTarget>,
@@ -44,20 +64,20 @@ pub struct DeviceMeResponse {
 }
 
 /// Request body for PUT /api/devices/me/rule.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SetMyRuleRequest {
     pub target: RoutingTarget,
 }
 
 /// Response body for PUT /api/devices/me/rule.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct SetMyRuleResponse {
     pub message: String,
     pub target: RoutingTarget,
 }
 
 /// Response for GET /api/system/status.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct SystemStatusResponse {
     pub version: String,
     pub uptime_seconds: u64,
@@ -74,14 +94,14 @@ pub struct SystemStatusResponse {
 ///
 /// Returns basic server information without requiring authentication.
 /// Used by the web UI's connection status widget.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct InfoResponse {
     pub version: String,
     pub uptime_seconds: u64,
 }
 
 /// Standard API error response.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiError {
     pub error: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,7 +112,7 @@ pub struct ApiError {
 }
 
 /// Request body for POST /api/tunnels (import .conf file).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateTunnelRequest {
     pub label: String,
     pub country_code: String,
@@ -101,20 +121,20 @@ pub struct CreateTunnelRequest {
 }
 
 /// Response for POST /api/tunnels.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateTunnelResponse {
     pub tunnel: Tunnel,
     pub message: String,
 }
 
 /// Response for GET /api/tunnels.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListTunnelsResponse {
     pub tunnels: Vec<Tunnel>,
 }
 
 /// Response for DELETE /api/tunnels/:id.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DeleteTunnelResponse {
     pub message: String,
 }
@@ -124,7 +144,7 @@ pub struct DeleteTunnelResponse {
 /// Uses `#[serde(flatten)]` so the JSON output includes all `Device` fields
 /// at the top level alongside `dhcp_status`, keeping the response
 /// backwards-compatible for consumers that ignore unknown fields.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct DeviceWithStatus {
     #[serde(flatten)]
     pub device: Device,
@@ -132,20 +152,20 @@ pub struct DeviceWithStatus {
 }
 
 /// Response for GET /api/devices (admin).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ListDevicesResponse {
     pub devices: Vec<DeviceWithStatus>,
 }
 
 /// Response for GET /api/devices/:id (admin).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DeviceDetailResponse {
     pub device: DeviceWithStatus,
     pub current_rule: Option<RoutingTarget>,
 }
 
 /// Request body for PUT /api/devices/:id (admin).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateDeviceRequest {
     pub name: Option<String>,
     pub device_type: Option<DeviceType>,
@@ -156,40 +176,50 @@ pub struct UpdateDeviceRequest {
 }
 
 /// Response for GET /api/setup/status.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupStatusResponse {
     pub setup_completed: bool,
 }
 
 /// Request body for POST /api/setup.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupRequest {
     pub username: String,
     pub password: String,
 }
 
+// Redact `password` — same rationale as `LoginRequest`.
+impl std::fmt::Debug for SetupRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SetupRequest")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// Response for POST /api/setup.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupResponse {
     pub message: String,
 }
 
 /// Response for GET /api/providers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListProvidersResponse {
     /// List of available VPN providers.
     pub providers: Vec<ProviderInfo>,
 }
 
 /// Request body for POST /api/providers/:id/validate.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ValidateCredentialsRequest {
     /// Credentials to validate against the provider.
     pub credentials: ProviderCredentials,
 }
 
 /// Response for POST /api/providers/:id/validate.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ValidateCredentialsResponse {
     /// Whether the credentials are valid.
     pub valid: bool,
@@ -198,14 +228,14 @@ pub struct ValidateCredentialsResponse {
 }
 
 /// Response for GET /api/providers/:id/countries.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListCountriesResponse {
     /// Available countries for this provider.
     pub countries: Vec<CountryInfo>,
 }
 
 /// Request body for POST /api/providers/:id/servers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListServersRequest {
     /// Credentials for authenticating with the provider.
     pub credentials: ProviderCredentials,
@@ -215,14 +245,14 @@ pub struct ListServersRequest {
 }
 
 /// Response for GET/POST /api/providers/:id/servers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListServersResponse {
     /// List of available servers from the provider.
     pub servers: Vec<ServerInfo>,
 }
 
 /// Request body for POST /api/providers/:id/setup.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupProviderRequest {
     /// Credentials for authenticating with the provider.
     pub credentials: ProviderCredentials,
@@ -244,7 +274,7 @@ pub struct SetupProviderRequest {
 }
 
 /// Response for POST /api/providers/:id/setup.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupProviderResponse {
     /// The created tunnel.
     pub tunnel: Tunnel,
@@ -259,13 +289,13 @@ pub struct SetupProviderResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/dhcp/config.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DhcpConfigResponse {
     pub config: DhcpConfig,
 }
 
 /// Request body for PUT /api/dhcp/config.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateDhcpConfigRequest {
     pub pool_start: String,
     pub pool_end: String,
@@ -276,25 +306,25 @@ pub struct UpdateDhcpConfigRequest {
 }
 
 /// Request body for POST /api/dhcp/config/toggle.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ToggleDhcpRequest {
     pub enabled: bool,
 }
 
 /// Response for GET /api/dhcp/leases.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ListDhcpLeasesResponse {
     pub leases: Vec<DhcpLease>,
 }
 
 /// Response for GET /api/dhcp/reservations.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ListDhcpReservationsResponse {
     pub reservations: Vec<DhcpReservation>,
 }
 
 /// Request body for POST /api/dhcp/reservations.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateDhcpReservationRequest {
     pub mac_address: String,
     pub ip_address: String,
@@ -303,20 +333,20 @@ pub struct CreateDhcpReservationRequest {
 }
 
 /// Response for POST /api/dhcp/reservations.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct CreateDhcpReservationResponse {
     pub reservation: DhcpReservation,
     pub message: String,
 }
 
 /// Response for DELETE /api/dhcp/reservations/:id.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DeleteDhcpReservationResponse {
     pub message: String,
 }
 
 /// Response for GET /api/dhcp/status.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DhcpStatusResponse {
     pub enabled: bool,
     pub running: bool,
@@ -326,7 +356,7 @@ pub struct DhcpStatusResponse {
 }
 
 /// Response for DELETE /api/dhcp/leases/:id.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct RevokeDhcpLeaseResponse {
     pub message: String,
 }
@@ -336,13 +366,13 @@ pub struct RevokeDhcpLeaseResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/dns/config.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DnsConfigResponse {
     pub config: DnsConfig,
 }
 
 /// Request body for PUT /api/dns/config.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateDnsConfigRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolution_mode: Option<String>,
@@ -369,7 +399,7 @@ pub struct UpdateDnsConfigRequest {
 }
 
 /// Upstream DNS server in API requests.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct UpstreamDnsRequest {
     pub address: String,
     pub name: String,
@@ -389,13 +419,13 @@ impl From<UpstreamDnsRequest> for UpstreamDns {
 }
 
 /// Request body for POST /api/dns/config/toggle.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ToggleDnsRequest {
     pub enabled: bool,
 }
 
 /// Response for GET /api/dns/status.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DnsStatusResponse {
     pub enabled: bool,
     pub running: bool,
@@ -405,7 +435,7 @@ pub struct DnsStatusResponse {
 }
 
 /// Response for POST /api/dns/cache/flush.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct DnsCacheFlushResponse {
     pub message: String,
     pub entries_cleared: u64,
@@ -416,13 +446,13 @@ pub struct DnsCacheFlushResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/dns/blocklists.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListBlocklistsResponse {
     pub blocklists: Vec<Blocklist>,
 }
 
 /// Request body for POST /api/dns/blocklists.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateBlocklistRequest {
     pub name: String,
     pub url: String,
@@ -431,14 +461,14 @@ pub struct CreateBlocklistRequest {
 }
 
 /// Response for POST /api/dns/blocklists.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateBlocklistResponse {
     pub blocklist: Blocklist,
     pub message: String,
 }
 
 /// Request body for PUT /api/dns/blocklists/{id} (partial update).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateBlocklistRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -451,14 +481,14 @@ pub struct UpdateBlocklistRequest {
 }
 
 /// Response for PUT /api/dns/blocklists/{id}.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateBlocklistResponse {
     pub blocklist: Blocklist,
     pub message: String,
 }
 
 /// Response for DELETE /api/dns/blocklists/{id}.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DeleteBlocklistResponse {
     pub message: String,
 }
@@ -473,13 +503,13 @@ pub struct DeleteBlocklistResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/dns/allowlist.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListAllowlistResponse {
     pub entries: Vec<AllowlistEntry>,
 }
 
 /// Request body for POST /api/dns/allowlist.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateAllowlistRequest {
     pub domain: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -487,14 +517,14 @@ pub struct CreateAllowlistRequest {
 }
 
 /// Response for POST /api/dns/allowlist.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateAllowlistResponse {
     pub entry: AllowlistEntry,
     pub message: String,
 }
 
 /// Response for DELETE /api/dns/allowlist/{id}.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DeleteAllowlistResponse {
     pub message: String,
 }
@@ -504,13 +534,13 @@ pub struct DeleteAllowlistResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/dns/rules.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ListFilterRulesResponse {
     pub rules: Vec<CustomFilterRule>,
 }
 
 /// Request body for POST /api/dns/rules.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateFilterRuleRequest {
     pub rule_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -519,14 +549,14 @@ pub struct CreateFilterRuleRequest {
 }
 
 /// Response for POST /api/dns/rules.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateFilterRuleResponse {
     pub rule: CustomFilterRule,
     pub message: String,
 }
 
 /// Request body for PUT /api/dns/rules/{id} (partial update).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateFilterRuleRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_text: Option<String>,
@@ -537,14 +567,14 @@ pub struct UpdateFilterRuleRequest {
 }
 
 /// Response for PUT /api/dns/rules/{id}.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateFilterRuleResponse {
     pub rule: CustomFilterRule,
     pub message: String,
 }
 
 /// Response for DELETE /api/dns/rules/{id}.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DeleteFilterRuleResponse {
     pub message: String,
 }
@@ -554,13 +584,13 @@ pub struct DeleteFilterRuleResponse {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /api/update/status.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateStatusResponse {
     pub status: UpdateStatus,
 }
 
 /// Response for POST /api/update/check.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateCheckResponse {
     pub status: UpdateStatus,
 }
@@ -570,27 +600,27 @@ pub struct UpdateCheckResponse {
 /// If `version` is omitted, installs the latest known version for the current
 /// channel. The operation is idempotent — calling twice while one is in
 /// flight returns the same handle.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct InstallUpdateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 }
 
 /// Response for POST /api/update/install.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct InstallUpdateResponse {
     pub handle: InstallHandle,
     pub message: String,
 }
 
 /// Response for POST /api/update/rollback.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RollbackResponse {
     pub message: String,
 }
 
 /// Request body for PUT /api/update/config.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateConfigRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_update_enabled: Option<bool>,
@@ -599,13 +629,106 @@ pub struct UpdateConfigRequest {
 }
 
 /// Response for PUT /api/update/config.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateConfigResponse {
     pub status: UpdateStatus,
 }
 
 /// Response for GET /api/update/history.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateHistoryResponse {
     pub entries: Vec<UpdateHistoryEntry>,
+}
+
+// ---------------------------------------------------------------------------
+// Backup / restore
+// ---------------------------------------------------------------------------
+
+/// Request body for `POST /api/backup/export`.
+///
+/// The passphrase is used to derive the age encryption key via scrypt.
+/// Server-side we enforce a minimum length of
+/// `crate::backup::MIN_PASSPHRASE_LEN`; clients should surface the same
+/// minimum in UI copy so failures happen before the request.
+#[derive(Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ExportBackupRequest {
+    /// Passphrase chosen by the admin. Never logged, never persisted —
+    /// lives only in the memory of the request that produced the bundle.
+    pub passphrase: String,
+}
+
+// Manual `Debug` so that a future `tracing::debug!(?req)` anywhere in
+// the export path renders `passphrase: "[REDACTED]"` instead of the
+// plaintext. The derived impl would leak it unconditionally.
+impl std::fmt::Debug for ExportBackupRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExportBackupRequest")
+            .field("passphrase", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Response for `POST /api/backup/import/preview`.
+///
+/// Returned before any daemon state is touched. The UI uses this to show
+/// the admin what will change — which database, config, and key files get
+/// swapped, and which bundle they came from — so the actual apply step
+/// is a conscious confirmation.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct RestorePreviewResponse {
+    /// Bundle manifest, fully decrypted and validated.
+    pub manifest: BundleManifest,
+    /// True when the bundle's `bundle_format_version` and
+    /// `schema_version` are both compatible with the running daemon. A
+    /// `false` here means `apply_import` will refuse; the UI should
+    /// surface `incompatibility_reason` and hide the confirm button.
+    pub compatible: bool,
+    /// Human-readable reason the bundle is incompatible, when
+    /// `compatible` is `false`. `None` on the happy path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incompatibility_reason: Option<String>,
+    /// Files the apply step will rename to `.bak-<timestamp>` siblings
+    /// and then overwrite. Surfaced verbatim in the UI so operators
+    /// understand the blast radius before confirming.
+    pub files_to_replace: Vec<String>,
+    /// Opaque token the caller passes back to `apply_import` to prove
+    /// they just saw this preview. Scoped to a single bundle + session.
+    pub preview_token: String,
+}
+
+/// Request body for `POST /api/backup/import/apply`.
+///
+/// Consumes the `preview_token` returned by `/preview`, ensuring the
+/// apply step always has a prior preview (no silent blind restores).
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ApplyImportRequest {
+    pub preview_token: String,
+}
+
+/// Response for `POST /api/backup/import/apply`.
+///
+/// Returned once the swap completes. The daemon restarts subsystems
+/// (DHCP/DNS/update runners) after the swap; subsequent API calls see
+/// the restored state.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ApplyImportResponse {
+    /// Final manifest for the applied bundle — identical to the one
+    /// surfaced in the preview but repeated here so the UI can confirm
+    /// without re-fetching.
+    pub manifest: BundleManifest,
+    /// `.bak-<timestamp>` snapshots of the files that were replaced.
+    /// Retained by the background cleanup task for 24 h.
+    pub snapshots: Vec<LocalSnapshot>,
+}
+
+/// Response for `GET /api/backup/status`.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct BackupStatusResponse {
+    pub status: BackupStatus,
+}
+
+/// Response for `GET /api/backup/snapshots`.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ListSnapshotsResponse {
+    pub snapshots: Vec<LocalSnapshot>,
 }

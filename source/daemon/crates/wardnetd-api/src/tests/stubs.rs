@@ -373,6 +373,9 @@ impl SystemService for StubSystemService {
             memory_total_bytes: 0,
         })
     }
+    async fn request_restart(&self) -> Result<(), AppError> {
+        Ok(())
+    }
 }
 
 pub struct StubTunnelService;
@@ -508,6 +511,39 @@ impl EventPublisher for StubEventPublisher {
     }
 }
 
+pub struct StubBackupService;
+#[async_trait]
+impl wardnetd_services::BackupService for StubBackupService {
+    async fn status(&self) -> Result<wardnet_common::api::BackupStatusResponse, AppError> {
+        unimplemented!()
+    }
+    async fn export(
+        &self,
+        _req: wardnet_common::api::ExportBackupRequest,
+    ) -> Result<Vec<u8>, AppError> {
+        unimplemented!()
+    }
+    async fn preview_import(
+        &self,
+        _bundle: Vec<u8>,
+        _passphrase: String,
+    ) -> Result<wardnet_common::api::RestorePreviewResponse, AppError> {
+        unimplemented!()
+    }
+    async fn apply_import(
+        &self,
+        _req: wardnet_common::api::ApplyImportRequest,
+    ) -> Result<wardnet_common::api::ApplyImportResponse, AppError> {
+        unimplemented!()
+    }
+    async fn list_snapshots(&self) -> Result<wardnet_common::api::ListSnapshotsResponse, AppError> {
+        unimplemented!()
+    }
+    async fn cleanup_old_snapshots(&self, _retain: std::time::Duration) -> Result<u32, AppError> {
+        Ok(0)
+    }
+}
+
 pub struct StubUpdateService;
 #[async_trait]
 impl wardnetd_services::UpdateService for StubUpdateService {
@@ -554,6 +590,7 @@ impl wardnetd_services::UpdateService for StubUpdateService {
 pub fn test_app_state() -> AppState {
     AppState::new(
         Arc::new(StubAuthService),
+        Arc::new(StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

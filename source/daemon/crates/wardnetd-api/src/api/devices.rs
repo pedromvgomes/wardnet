@@ -2,21 +2,50 @@ use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::{Path, State};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use uuid::Uuid;
 use wardnet_common::api::{
-    DeviceDetailResponse, DeviceMeResponse, DeviceWithStatus, ListDevicesResponse,
+    ApiError, DeviceDetailResponse, DeviceMeResponse, DeviceWithStatus, ListDevicesResponse,
     SetMyRuleRequest, SetMyRuleResponse, UpdateDeviceRequest,
 };
 use wardnet_common::device::DhcpStatus;
 
 use crate::api::middleware::{AdminAuth, ClientIp};
+use crate::api::responses::{AuthErrors, BadRequest, NotFound};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
 
-/// GET /api/devices/me
-///
-/// Thin handler — identifies the caller by source IP and returns their
-/// device info and current routing rule. No authentication required.
+/// Register device routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(list_devices))
+        .routes(routes!(get_me))
+        .routes(routes!(set_my_rule))
+        .routes(routes!(get_device, update_device))
+}
+
+const TAG: &str = "devices";
+const PATH_ME: &str = "/api/devices/me";
+const PATH_ME_RULE: &str = "/api/devices/me/rule";
+const PATH_LIST: &str = "/api/devices";
+const PATH_ITEM: &str = "/api/devices/{id}";
+
+#[utoipa::path(
+    get,
+    path = PATH_ME,
+    tag = TAG,
+    description = "Identify the caller by source IP and return their device info, \
+                   current routing rule, and the list of available tunnels they can \
+                   route through. Used by the self-service \"My Device\" page, so no \
+                   authentication is required — the daemon trusts the source IP of the \
+                   incoming TCP connection.",
+    responses(
+        (status = 200, description = "Caller device info and available tunnels", body = DeviceMeResponse),
+        (status = 500, description = "Internal server error", body = ApiError),
+    ),
+    security(()),
+)]
 pub async fn get_me(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
@@ -51,11 +80,23 @@ pub async fn get_me(
     Ok(Json(response))
 }
 
-/// PUT /api/devices/me/rule
-///
-/// Thin handler — allows the caller to set their own routing rule.
-/// Delegates admin-lock checks to [`DeviceService`](wardnetd_services::DeviceService).
-/// No authentication required (self-service by IP).
+#[utoipa::path(
+    put,
+    path = PATH_ME_RULE,
+    tag = TAG,
+    description = "Let the caller change their own routing rule (direct vs. a specific \
+                   tunnel). The target device is identified by source IP. Admin-locked \
+                   devices are rejected with 403 — an admin must lift the lock first. \
+                   No authentication is required (self-service by IP).",
+    request_body = SetMyRuleRequest,
+    responses(
+        (status = 200, description = "Updated caller routing rule", body = SetMyRuleResponse),
+        (status = 400, description = "Malformed request body", body = ApiError),
+        (status = 403, description = "Device is admin-locked", body = ApiError),
+        (status = 500, description = "Internal server error", body = ApiError),
+    ),
+    security(()),
+)]
 pub async fn set_my_rule(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
@@ -105,7 +146,22 @@ fn enrich_device(
     }
 }
 
-/// GET /api/devices — List all devices (admin only).
+#[utoipa::path(
+    get,
+    path = PATH_LIST,
+    tag = TAG,
+    description = "List every device the daemon has seen on the LAN, enriched with its \
+                   current DHCP status (reservation, active lease, or external/unknown). \
+                   Admin only.",
+    responses(
+        (status = 200, description = "List of devices with DHCP status", body = ListDevicesResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn list_devices(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -121,7 +177,24 @@ pub async fn list_devices(
     Ok(Json(ListDevicesResponse { devices }))
 }
 
-/// GET /api/devices/:id — Get device detail with routing rule (admin only).
+#[utoipa::path(
+    get,
+    path = PATH_ITEM,
+    tag = TAG,
+    description = "Fetch a single device by ID, including its current routing rule and \
+                   DHCP status. Admin only.",
+    params(("id" = Uuid, Path, description = "Device ID")),
+    responses(
+        (status = 200, description = "Device detail", body = DeviceDetailResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn get_device(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -145,10 +218,30 @@ pub async fn get_device(
     }))
 }
 
-/// PUT /api/devices/:id — Update device properties (admin only).
-///
-/// Supports updating name, device type, routing target, and admin-locked flag.
-/// Each field is optional; only provided fields are changed.
+#[utoipa::path(
+    put,
+    path = PATH_ITEM,
+    tag = TAG,
+    description = "Update mutable device properties: display name, device type, routing \
+                   target, and the admin-locked flag. Each field is optional; only \
+                   fields present in the request body are changed. Partial updates \
+                   are best-effort — the mutations are not transactional across \
+                   services, but they are ordered most-likely-to-fail first so a \
+                   rejected routing rule leaves the name and admin-locked flag \
+                   unchanged. Admin only.",
+    params(("id" = Uuid, Path, description = "Device ID")),
+    request_body = UpdateDeviceRequest,
+    responses(
+        (status = 200, description = "Updated device detail", body = DeviceDetailResponse),
+        AuthErrors,
+        NotFound,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_device(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -159,15 +252,24 @@ pub async fn update_device(
         .parse()
         .map_err(|_| AppError::BadRequest("invalid device ID".to_owned()))?;
 
-    // Update name and type if provided.
-    let device = state
-        .discovery_service()
-        .update_device(uuid, body.name.as_deref(), body.device_type)
-        .await?;
+    // Order deliberately runs the mutations most likely to reject first so
+    // a failure happens before any later field is touched: routing-rule
+    // validation (tunnel exists, target shape) is the usual failure mode,
+    // admin_locked is a trivial bool flip, and the name/type update is
+    // idempotent. This is still a best-effort partial write — the three
+    // mutations are NOT transactional across services — but the reorder
+    // removes the surface where "rule rejected" leaves an unrelated name
+    // change persisted. Partial-update semantics are documented in the
+    // `#[utoipa::path(description = …)]` block above.
+    let device_id_str = uuid.to_string();
 
-    let device_id_str = device.id.to_string();
+    if let Some(target) = body.routing_target {
+        state
+            .device_service()
+            .set_rule(&device_id_str, target)
+            .await?;
+    }
 
-    // Update admin_locked if provided.
     if let Some(locked) = body.admin_locked {
         state
             .device_service()
@@ -175,13 +277,10 @@ pub async fn update_device(
             .await?;
     }
 
-    // Update routing rule if provided.
-    if let Some(target) = body.routing_target {
-        state
-            .device_service()
-            .set_rule(&device_id_str, target)
-            .await?;
-    }
+    let device = state
+        .discovery_service()
+        .update_device(uuid, body.name.as_deref(), body.device_type)
+        .await?;
 
     // Fetch current rule for the response.
     let rule = state

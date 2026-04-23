@@ -185,6 +185,7 @@ fn connect_info() -> ConnectInfo<SocketAddr> {
 fn build_state(dhcp_svc: impl DhcpService + 'static) -> AppState {
     AppState::new(
         Arc::new(MockAuthService),
+        Arc::new(crate::tests::stubs::StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(dhcp_svc),
         Arc::new(StubDnsService),

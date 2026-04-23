@@ -1,4 +1,4 @@
-use crate::api::{ApiError, SetMyRuleRequest};
+use crate::api::{ApiError, ExportBackupRequest, LoginRequest, SetMyRuleRequest, SetupRequest};
 use crate::routing::RoutingTarget;
 
 #[test]
@@ -35,4 +35,38 @@ fn api_error_includes_some_detail() {
     };
     let json = serde_json::to_string(&err).unwrap();
     assert!(json.contains("\"detail\":\"invalid field\""));
+}
+
+#[test]
+fn login_request_debug_redacts_password() {
+    let req = LoginRequest {
+        username: "alice".to_owned(),
+        password: "hunter2".to_owned(),
+    };
+    let rendered = format!("{req:?}");
+    assert!(rendered.contains("alice"));
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("hunter2"));
+}
+
+#[test]
+fn setup_request_debug_redacts_password() {
+    let req = SetupRequest {
+        username: "admin".to_owned(),
+        password: "super-secret".to_owned(),
+    };
+    let rendered = format!("{req:?}");
+    assert!(rendered.contains("admin"));
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("super-secret"));
+}
+
+#[test]
+fn export_backup_request_debug_redacts_passphrase() {
+    let req = ExportBackupRequest {
+        passphrase: "correct-horse-battery-staple".to_owned(),
+    };
+    let rendered = format!("{req:?}");
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("correct-horse-battery-staple"));
 }

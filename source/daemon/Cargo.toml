@@ -49,7 +49,7 @@ tracing = "0.1"
 # https://crates.io/crates/tokio
 tokio = { version = "1", features = ["full"] }
 # https://crates.io/crates/axum
-axum = { version = "0.8", features = ["macros", "ws"] }
+axum = { version = "0.8", features = ["macros", "multipart", "ws"] }
 # https://crates.io/crates/axum-extra
 axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 
@@ -120,6 +120,8 @@ flate2 = "1"
 tar = "0.4"
 # https://crates.io/crates/minisign-verify — verify minisign signatures on release artefacts
 minisign-verify = "0.2"
+# https://crates.io/crates/age — symmetric passphrase encryption for backup bundles (scrypt KDF + ChaCha20-Poly1305)
+age = { version = "0.11", default-features = false }
 # https://crates.io/crates/futures
 futures = "0.3"
 # https://crates.io/crates/cron
@@ -150,3 +152,8 @@ opentelemetry-appender-tracing = "0.31"
 
 # https://crates.io/crates/pyroscope
 pyroscope = { version = "2", features = ["backend-pprof-rs"] }
+
+# https://crates.io/crates/utoipa
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+# https://crates.io/crates/utoipa-axum
+utoipa-axum = "0.2"

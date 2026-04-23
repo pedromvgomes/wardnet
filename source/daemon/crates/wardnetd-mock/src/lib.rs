@@ -11,7 +11,7 @@
 //! (`wardnetd-services::init_services_with_factory`) against a set of
 //! no-op [`backends`] that implement every trait (`TunnelInterface`,
 //! `FirewallManager`, `PolicyRouter`, `PacketCapture`, `HostnameResolver`,
-//! `KeyStore`, `DhcpServer`, `DnsServer`) but perform no real I/O.
+//! `SecretStore`, `DhcpServer`, `DnsServer`) but perform no real I/O.
 //!
 //! The database defaults to `:memory:`; an on-disk path can be supplied
 //! via `--database` for sessions that should survive restart.

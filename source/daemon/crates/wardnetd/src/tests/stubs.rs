@@ -34,8 +34,8 @@ use wardnetd_services::device::packet_capture::ObservedDevice;
 use wardnetd_services::error::AppError;
 use wardnetd_services::event::EventPublisher;
 use wardnetd_services::{
-    AuthService, DeviceDiscoveryService, DeviceService, DhcpService, ObservationResult,
-    RoutingService, SystemService, TunnelService, VpnProviderService,
+    AuthService, BackupService, DeviceDiscoveryService, DeviceService, DhcpService,
+    ObservationResult, RoutingService, SystemService, TunnelService, VpnProviderService,
 };
 
 use wardnetd_api::state::AppState;
@@ -49,6 +49,40 @@ use wardnetd_api::state::AppState;
 /// `validate_session` and `validate_api_key` return `None` (unauthenticated).
 /// All other methods panic with `unimplemented!()`.
 pub struct StubAuthService;
+
+pub struct StubBackupService;
+
+#[async_trait]
+impl BackupService for StubBackupService {
+    async fn status(&self) -> Result<wardnet_common::api::BackupStatusResponse, AppError> {
+        unimplemented!()
+    }
+    async fn export(
+        &self,
+        _req: wardnet_common::api::ExportBackupRequest,
+    ) -> Result<Vec<u8>, AppError> {
+        unimplemented!()
+    }
+    async fn preview_import(
+        &self,
+        _bundle: Vec<u8>,
+        _passphrase: String,
+    ) -> Result<wardnet_common::api::RestorePreviewResponse, AppError> {
+        unimplemented!()
+    }
+    async fn apply_import(
+        &self,
+        _req: wardnet_common::api::ApplyImportRequest,
+    ) -> Result<wardnet_common::api::ApplyImportResponse, AppError> {
+        unimplemented!()
+    }
+    async fn list_snapshots(&self) -> Result<wardnet_common::api::ListSnapshotsResponse, AppError> {
+        unimplemented!()
+    }
+    async fn cleanup_old_snapshots(&self, _retain: std::time::Duration) -> Result<u32, AppError> {
+        Ok(0)
+    }
+}
 
 #[async_trait]
 impl AuthService for StubAuthService {
@@ -155,6 +189,9 @@ impl SystemService for StubSystemService {
         std::time::Duration::from_secs(0)
     }
     async fn status(&self) -> Result<SystemStatusResponse, AppError> {
+        unimplemented!()
+    }
+    async fn request_restart(&self) -> Result<(), AppError> {
         unimplemented!()
     }
 }
@@ -635,6 +672,7 @@ impl wardnetd_services::dns::server::DnsServer for StubDnsServer {
 pub fn test_app_state() -> AppState {
     AppState::new(
         Arc::new(StubAuthService),
+        Arc::new(StubBackupService),
         Arc::new(StubDeviceService),
         Arc::new(StubDhcpService),
         Arc::new(StubDnsService),

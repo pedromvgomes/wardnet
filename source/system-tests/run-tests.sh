@@ -44,7 +44,7 @@ fi
 DB_PATH="${WORK_DIR}/wardnet-test.db"
 LOG_PATH="${WORK_DIR}/wardnetd.log"
 CONFIG_PATH="${WORK_DIR}/wardnet-test.toml"
-KEYS_DIR="${WORK_DIR}/keys"
+SECRETS_DIR="${WORK_DIR}/secrets"
 FIXTURES_DIR="${SCRIPT_DIR}/fixtures/generated"
 
 # Colors.
@@ -203,7 +203,7 @@ detect_bridge_interface() {
 
 write_daemon_config() {
     local bridge_iface="$1"
-    mkdir -p "$WORK_DIR" "$KEYS_DIR"
+    mkdir -p "$WORK_DIR" "$SECRETS_DIR"
 
     cat > "$CONFIG_PATH" <<EOF
 [server]
@@ -232,8 +232,11 @@ default_policy = "direct"
 [detection]
 enabled = true
 
+[secret_store]
+provider = "file_system"
+path = "${SECRETS_DIR}"
+
 [tunnel]
-keys_dir = "${KEYS_DIR}"
 stats_interval_secs = 30
 health_check_interval_secs = 60
 idle_timeout_secs = ${WARDNET_IDLE_TIMEOUT}

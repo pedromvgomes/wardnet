@@ -7,19 +7,39 @@
 use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
+use utoipa::IntoParams;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use wardnet_common::api::{
     InstallUpdateRequest, InstallUpdateResponse, RollbackResponse, UpdateCheckResponse,
     UpdateConfigRequest, UpdateConfigResponse, UpdateHistoryResponse, UpdateStatusResponse,
 };
 
 use crate::api::middleware::AdminAuth;
+use crate::api::responses::{AuthErrors, BadRequest};
 use crate::state::AppState;
 use wardnetd_services::error::AppError;
 
+/// Register auto-update routes onto the given [`OpenApiRouter`].
+pub fn register(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(status))
+        .routes(routes!(check))
+        .routes(routes!(install))
+        .routes(routes!(rollback))
+        .routes(routes!(update_config))
+        .routes(routes!(history))
+}
+
 /// Query parameters for GET /api/update/history.
-#[derive(Debug, Deserialize)]
+///
+/// `limit` is clamped to `HISTORY_LIMIT_MAX` before being forwarded to the
+/// service so a client can't force `SQLite` to read and serialize an
+/// arbitrarily large slice of `update_history`.
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct HistoryQuery {
-    /// Max entries to return (default 20).
+    /// Max entries to return (default 20, capped at 100).
     #[serde(default = "default_history_limit")]
     pub limit: u32,
 }
@@ -28,7 +48,25 @@ const fn default_history_limit() -> u32 {
     20
 }
 
-/// GET /api/update/status
+/// Hard ceiling on `limit` enforced by the handler.
+const HISTORY_LIMIT_MAX: u32 = 100;
+
+#[utoipa::path(
+    get,
+    path = "/api/update/status",
+    tag = "update",
+    description = "Return the current auto-update state: currently running version, \
+                   latest known release from the manifest, configured channel, and \
+                   whether an install is in progress. Admin only.",
+    responses(
+        (status = 200, description = "Current auto-update status", body = UpdateStatusResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn status(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -36,7 +74,22 @@ pub async fn status(
     Ok(Json(state.update_service().status().await?))
 }
 
-/// POST /api/update/check — force a manifest refresh.
+#[utoipa::path(
+    post,
+    path = "/api/update/check",
+    tag = "update",
+    description = "Force an immediate refresh of the update manifest from the release \
+                   server, bypassing the normal polling interval, and return whether \
+                   a newer version is available on the configured channel. Admin only.",
+    responses(
+        (status = 200, description = "Manifest refresh result", body = UpdateCheckResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn check(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -44,7 +97,25 @@ pub async fn check(
     Ok(Json(state.update_service().check().await?))
 }
 
-/// POST /api/update/install — kick off an install.
+#[utoipa::path(
+    post,
+    path = "/api/update/install",
+    tag = "update",
+    description = "Kick off an install of an available release. If the request body is \
+                   omitted, the latest release on the configured channel is installed. \
+                   The install runs asynchronously; poll /api/update/status for \
+                   progress. Admin only.",
+    request_body(content = InstallUpdateRequest, description = "Install options; if omitted, installs the latest available release"),
+    responses(
+        (status = 200, description = "Install initiated", body = InstallUpdateResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn install(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -54,7 +125,22 @@ pub async fn install(
     Ok(Json(state.update_service().install(req).await?))
 }
 
-/// POST /api/update/rollback — swap back to `<live>.old`.
+#[utoipa::path(
+    post,
+    path = "/api/update/rollback",
+    tag = "update",
+    description = "Roll back to the previous binary that was swapped aside as \
+                   `<live>.old` during the last successful install. Used to recover \
+                   from a bad release without manual SSH intervention. Admin only.",
+    responses(
+        (status = 200, description = "Rollback initiated", body = RollbackResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn rollback(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -62,7 +148,24 @@ pub async fn rollback(
     Ok(Json(state.update_service().rollback().await?))
 }
 
-/// PUT /api/update/config — toggle auto-update / switch channel.
+#[utoipa::path(
+    put,
+    path = "/api/update/config",
+    tag = "update",
+    description = "Update auto-update settings: enable or disable automatic installs \
+                   and switch between release channels (e.g. stable vs. beta). Admin \
+                   only.",
+    request_body = UpdateConfigRequest,
+    responses(
+        (status = 200, description = "Updated auto-update configuration", body = UpdateConfigResponse),
+        AuthErrors,
+        BadRequest,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn update_config(
     State(state): State<AppState>,
     _auth: AdminAuth,
@@ -71,11 +174,29 @@ pub async fn update_config(
     Ok(Json(state.update_service().update_config(body).await?))
 }
 
-/// GET /api/update/history?limit=N
+#[utoipa::path(
+    get,
+    path = "/api/update/history",
+    tag = "update",
+    description = "List recent install and rollback attempts, including timestamp, \
+                   source and target versions, outcome, and any error message. The \
+                   `limit` query parameter caps the number of entries returned \
+                   (default 20). Admin only.",
+    params(HistoryQuery),
+    responses(
+        (status = 200, description = "Update history", body = UpdateHistoryResponse),
+        AuthErrors,
+    ),
+    security(
+        ("session_cookie" = []),
+        ("bearer_auth" = []),
+    ),
+)]
 pub async fn history(
     State(state): State<AppState>,
     _auth: AdminAuth,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<UpdateHistoryResponse>, AppError> {
-    Ok(Json(state.update_service().history(query.limit).await?))
+    let limit = query.limit.clamp(1, HISTORY_LIMIT_MAX);
+    Ok(Json(state.update_service().history(limit).await?))
 }

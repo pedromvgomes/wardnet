@@ -1,10 +1,12 @@
 mod auth;
+mod backup;
 mod devices;
 mod dhcp;
 mod dns;
 mod info;
 mod jobs;
 mod middleware;
+mod openapi;
 mod providers;
 mod request_context;
 mod router;
