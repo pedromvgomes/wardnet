@@ -22,7 +22,14 @@ on:
     branches: [main]
   workflow_call:
 
-permissions: read-all
+# Workflow-level permissions must be the union of every leaf's
+# declared permissions — GitHub requires the called reusable workflow
+# to be a subset of the caller. `security-events: write` is for
+# build-daemon's clippy SARIF upload.
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 env:
   CARGO_TERM_COLOR: always
