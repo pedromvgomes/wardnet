@@ -1,0 +1,86 @@
+name: Release Image
+
+# Reusable leaf that publishes the production wardnetd Docker image to
+# GitHub Container Registry (ghcr.io). Builds a multi-arch manifest
+# (linux/amd64 + linux/arm64) and tags it with the release version plus
+# `:latest` (for stable releases only — pre-releases skip `:latest` so
+# `docker pull ghcr.io/.../wardnetd:latest` never resolves to a beta).
+#
+# Runs AFTER release-daemon because source/daemon/Dockerfile downloads
+# the signed release tarball from GitHub Releases at build time. Without
+# an existing `v${VERSION}` release the Dockerfile has nothing to pull.
+#
+# Stage 5 will add a sibling variant (wardnetd-test) built from the same
+# Dockerfile with a test-agent overlay. Stage 12 will rewire release.yml
+# so this job also depends on the e2e test jobs.
+#
+# Artifacts: none — the image manifest lives in ghcr.io.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Semantic version (e.g. `0.2.1`, `0.2.1-beta.1`).
+        type: string
+        required: true
+      prerelease:
+        description: When true, skip the `:latest` tag.
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish to GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        env:
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}/wardnetd
+        run: |
+          set -euo pipefail
+          TAGS="${REGISTRY}:${VERSION}"
+          if [[ "${PRERELEASE}" != "true" ]]; then
+            TAGS="${TAGS},${REGISTRY}:latest"
+          fi
+          echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"
+          echo "Computed tags: ${TAGS}"
+
+      - name: Build and push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: source/daemon/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            WARDNET_VERSION=${{ inputs.version }}
+          # Attach an SBOM (SPDX) and SLSA provenance attestation to the
+          # pushed image manifest. Both ride in the OCI manifest — no
+          # separate upload step, no additional permissions needed
+          # beyond `packages: write`.
+          sbom: true
+          provenance: mode=max
