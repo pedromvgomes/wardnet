@@ -16,7 +16,7 @@ cd "$SRC/wardnet/source/daemon/fuzz"
 # silently ignored and builds fail with:
 #
 #   error: rustc 1.91.0-nightly is not supported by the following
-#   packages: wardnet-common@0.2.0 requires rustc 1.94, ...
+#   packages: wardnet-common@0.2.0 requires rustc 1.95, ...
 #
 # Parse the channel out of rust-toolchain.toml (kept as the single
 # source of truth), install it explicitly, then override the image's
