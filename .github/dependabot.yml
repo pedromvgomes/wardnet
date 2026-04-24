@@ -69,3 +69,8 @@ updates:
       prefix: "chore(deps):"
     cooldown:
       default-days: 3
+
+  - package-ecosystem: npm
+    directory: /source/system-tests
+    schedule:
+      interval: daily
