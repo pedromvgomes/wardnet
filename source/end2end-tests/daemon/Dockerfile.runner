@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+#
+# Test-runner image for the daemon e2e suite.
+#
+# Plain node:22 + corepack-enabled yarn 4 with the e2e package's deps
+# pre-installed. The repo is mounted read-only at runtime so test source
+# edits don't require an image rebuild; only dependency changes
+# (package.json / yarn.lock / SDK additions) trigger one.
+#
+# Build context: repo root.
+#   docker build -f source/end2end-tests/daemon/Dockerfile.runner -t wardnet-e2e-runner .
+
+FROM node:22-bookworm-slim
+
+RUN corepack enable
+
+WORKDIR /work/daemon
+
+# The @wardnet/js dep is consumed via yarn's `portal:` protocol against
+# ../../sdk/wardnet-js, so the SDK source has to sit at the matching
+# path inside the image for `yarn install` to resolve it.
+COPY source/sdk/wardnet-js /work/sdk/wardnet-js
+COPY source/end2end-tests/daemon/package.json \
+     source/end2end-tests/daemon/yarn.lock \
+     source/end2end-tests/daemon/.yarnrc.yml \
+     /work/daemon/
+
+RUN yarn install --immutable
+
+# Tests + configs come last so iterating on specs doesn't bust the
+# yarn-install cache layer.
+COPY source/end2end-tests/daemon/tsconfig.json \
+     source/end2end-tests/daemon/vitest.config.ts \
+     /work/daemon/
+COPY source/end2end-tests/daemon/tests /work/daemon/tests
+
+CMD ["yarn", "test"]

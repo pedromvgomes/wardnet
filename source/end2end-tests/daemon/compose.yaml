@@ -1,0 +1,114 @@
+# Daemon end-to-end test topology.
+#
+# Stage 6a (this file) ships only what the smoke spec needs: the
+# daemon container plus a node:22 test runner. Future stages will add
+# `test_alpine`, `test_ubuntu`, `wg_gateway_1`, `wg_gateway_2`,
+# `nordvpn_mock` — see source/end2end-tests/daemon/README or the plan
+# under .agents/ for the full topology.
+#
+# Networks (per the e2e plan, Deliverable 5):
+#   wardnet_mgmt 10.90.0.0/24 — test runner ↔ daemon API.
+#   wardnet_lan  10.91.0.0/24 — daemon's simulated LAN. Bridge
+#                              gateway parked at .254 so the daemon
+#                              can own .1. Docker IPAM .2/28 (only
+#                              .2–.15) leaves .100+ free for the
+#                              daemon's DHCP pool + reservations.
+#   wardnet_wan  10.92.0.0/24 — upstream WG-gateway side; unused by
+#                              the smoke but provisioned now so the
+#                              daemon attaches the same NICs in every
+#                              stage.
+
+name: wardnet-e2e-daemon
+
+services:
+  wardnetd:
+    build:
+      context: ../../..
+      dockerfile: source/daemon/Dockerfile.test
+    image: ${WARDNETD_TEST_IMAGE:-wardnetd:dev-test}
+    # systemd as PID 1 needs writable /run + /run/lock and the
+    # graceful-shutdown signal. STOPSIGNAL is set in wardnet-base; the
+    # tmpfs mounts and capabilities are runtime concerns and live here.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - wardnet_state:/var/lib/wardnet
+    # cgroup v2 is the default on modern Docker engines; systemd
+    # inside the container picks it up automatically.
+    networks:
+      wardnet_mgmt:
+        ipv4_address: 10.90.0.2
+      wardnet_lan:
+        ipv4_address: 10.91.0.1
+      wardnet_wan:
+        ipv4_address: 10.92.0.2
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7411/api/info || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  test_runner:
+    build:
+      context: ../../..
+      dockerfile: source/end2end-tests/daemon/Dockerfile.runner
+    image: wardnet-e2e-runner:dev
+    depends_on:
+      wardnetd:
+        condition: service_healthy
+    environment:
+      WARDNET_API_BASE_URL: "http://wardnetd:7411/api"
+    # Repo mounted read-only — keeps the runner image stable across
+    # spec edits while preventing the test container from mutating
+    # workspace files. Reports go to a shared volume the host (or CI)
+    # uploads as an artefact.
+    volumes:
+      - ../../..:/repo:ro
+      - reports:/work/daemon/reports
+    networks:
+      wardnet_mgmt:
+        ipv4_address: 10.90.0.10
+      # Stage 6a doesn't drive LAN-side traffic, but attaching the
+      # runner to wardnet_lan now keeps the topology stable for the
+      # specs landing in PR5. No static IP — Docker hands one out
+      # from the bridge's IPAM range (.2–.15).
+      wardnet_lan: {}
+
+volumes:
+  wardnet_state:
+  reports:
+
+networks:
+  wardnet_mgmt:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.90.0.0/24
+          gateway: 10.90.0.254
+  wardnet_lan:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.91.0.0/24
+          # Bridge gateway parked high so the daemon owns .1.
+          gateway: 10.91.0.254
+          # Docker hands out .2–.15 to attached containers; the
+          # daemon's DHCP pool starts at .100, so any LAN client
+          # holding a .100+ address unambiguously got it from the
+          # daemon (PR5 dhcp.spec.ts assertion).
+          ip_range: 10.91.0.0/28
+  wardnet_wan:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.92.0.0/24
+          gateway: 10.92.0.254
