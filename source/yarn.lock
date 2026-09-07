@@ -4702,7 +4702,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/react-store@npm:^0.11.0":
+"@tanstack/react-store@npm:^0.11.1":
   version: 0.11.1
   resolution: "@tanstack/react-store@npm:0.11.1"
   dependencies:
@@ -4715,31 +4715,31 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/react-table@npm:9.1.2":
-  version: 9.1.2
-  resolution: "@tanstack/react-table@npm:9.1.2"
+"@tanstack/react-table@npm:9.2.4":
+  version: 9.2.4
+  resolution: "@tanstack/react-table@npm:9.2.4"
   dependencies:
-    "@tanstack/react-store": "npm:^0.11.0"
-    "@tanstack/table-core": "npm:9.1.2"
+    "@tanstack/react-store": "npm:^0.11.1"
+    "@tanstack/table-core": "npm:9.2.4"
   peerDependencies:
     react: ">=18"
-  checksum: 10c0/b077ffef00ffefab14a6095b07c0d853e24f812ec96aba84ca988ebd20c5aa04a34ef781a5638d579720c23c9415b6eefc03f9d2bec60acd2666e1741ae65e20
+  checksum: 10c0/f68d6da9850e7783773a035186e11744dacaf5ca61075766ecc7d4b5266af2e4afec005f19ac664c1deba6bf5b7586fed90a67372c82127afd8fdaf0473e73b4
   languageName: node
   linkType: hard
 
-"@tanstack/store@npm:0.11.1, @tanstack/store@npm:^0.11.0":
+"@tanstack/store@npm:0.11.1, @tanstack/store@npm:^0.11.1":
   version: 0.11.1
   resolution: "@tanstack/store@npm:0.11.1"
   checksum: 10c0/36e308f3a5037a4d79e2b2ea9f6f4015a617fcd7cb8ff541fe50869b015fb8753b267a8c24709ad197c4c3b5fd85207edc4f71eccaf9b0d311f62336a9cf7764
   languageName: node
   linkType: hard
 
-"@tanstack/table-core@npm:9.1.2":
-  version: 9.1.2
-  resolution: "@tanstack/table-core@npm:9.1.2"
+"@tanstack/table-core@npm:9.2.4":
+  version: 9.2.4
+  resolution: "@tanstack/table-core@npm:9.2.4"
   dependencies:
-    "@tanstack/store": "npm:^0.11.0"
-  checksum: 10c0/c11991f8bc2e595cfa7e071e630d107928c59513f2b79d6339e690c5b1b465f38a6e042e2742f3f4eff55847c0981b9c17b1ccf132de417c6dfe87da50cffda5
+    "@tanstack/store": "npm:^0.11.1"
+  checksum: 10c0/fae9e7f3028f45eb2cd3e831365e398a92030d685acdd0458c3c2245eb8456176abd0d5ca208ea58eb9e7a4ccc666c26986269c93bc4ce25603866805bb837b9
   languageName: node
   linkType: hard
 
@@ -5465,7 +5465,7 @@ __metadata:
     "@fontsource-variable/jetbrains-mono": "npm:^5.3.0"
     "@tailwindcss/vite": "npm:4.3.3"
     "@tanstack/react-query": "npm:5.102.2"
-    "@tanstack/react-table": "npm:9.1.2"
+    "@tanstack/react-table": "npm:9.2.4"
     "@testing-library/dom": "npm:10.4.1"
     "@testing-library/jest-dom": "npm:7.0.1"
     "@testing-library/react": "npm:16.3.2"
