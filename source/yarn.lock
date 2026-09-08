@@ -5291,9 +5291,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vitejs/plugin-react@npm:6.1.0":
-  version: 6.1.0
-  resolution: "@vitejs/plugin-react@npm:6.1.0"
+"@vitejs/plugin-react@npm:6.1.1":
+  version: 6.1.1
+  resolution: "@vitejs/plugin-react@npm:6.1.1"
   dependencies:
     "@rolldown/pluginutils": "npm:^1.0.1"
   peerDependencies:
@@ -5308,7 +5308,7 @@ __metadata:
       optional: true
     oxc-transform-react:
       optional: true
-  checksum: 10c0/e6a955d2aa84fa09d4335fb0a3d3466a71bc31efe8d3e0096d34c5d1c6f97d9c92b3ffe7ec8ad8fd63ceee1323770d6b184b2a32a7fadd82fd2a46a3b444e81a
+  checksum: 10c0/4599b37ee19ebee289782b177642e3002afa9b74cb57a2c0e2a601053c7ebb47f9ef178ab605ff1217de1d23069948a8d366447bfac0d9fb2f17afee5368acd0
   languageName: node
   linkType: hard
 
@@ -5433,7 +5433,7 @@ __metadata:
     "@types/node": "npm:26.4.0"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.5"
-    "@vitejs/plugin-react": "npm:6.1.0"
+    "@vitejs/plugin-react": "npm:6.1.1"
     "@vitest/coverage-v8": "npm:4.1.11"
     "@wardnet/js": "workspace:*"
     "@wardnet/styles": "npm:^0.1.0"
@@ -5474,7 +5474,7 @@ __metadata:
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.5"
     "@types/react-is": "npm:^19.2.0"
-    "@vitejs/plugin-react": "npm:6.1.0"
+    "@vitejs/plugin-react": "npm:6.1.1"
     "@vitest/coverage-v8": "npm:4.1.11"
     "@wardnet/js": "workspace:*"
     "@wardnet/styles": "npm:^0.1.0"
@@ -5567,7 +5567,7 @@ __metadata:
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.5"
     "@types/semver": "npm:7.8.0"
-    "@vitejs/plugin-react": "npm:6.1.0"
+    "@vitejs/plugin-react": "npm:6.1.1"
     "@vitest/coverage-v8": "npm:4.1.11"
     "@wardnet/brand": "npm:^0.1.0"
     "@wardnet/styles": "npm:^0.1.0"
@@ -5642,7 +5642,7 @@ __metadata:
     "@types/node": "npm:26.4.0"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.5"
-    "@vitejs/plugin-react": "npm:6.1.0"
+    "@vitejs/plugin-react": "npm:6.1.1"
     "@vitest/coverage-v8": "npm:4.1.11"
     "@wardnet/js": "workspace:*"
     "@wardnet/styles": "npm:^0.1.0"
@@ -5678,7 +5678,7 @@ __metadata:
     "@testing-library/react": "npm:16.3.2"
     "@testing-library/user-event": "npm:14.6.6"
     "@types/qrcode": "npm:1.5.6"
-    "@vitejs/plugin-react": "npm:6.1.0"
+    "@vitejs/plugin-react": "npm:6.1.1"
     "@vitest/coverage-v8": "npm:4.1.11"
     "@wardnet/js": "workspace:*"
     "@wardnet/ui": "npm:^0.3.0"
